@@ -20,6 +20,9 @@ export interface Service {
   status: ServiceStatus;
   sortOrder: number;
   createdAt: string;
+  avgLatency?: number | null;
+  uptimePercentage?: number | null;
+  uptimeDays?: UptimeDay[];
 }
 
 export interface HealthCheckResult {
@@ -34,6 +37,7 @@ export interface HealthCheckResult {
 export interface UptimeDay {
   date: string;
   status: ServiceStatus;
+  avgResponseTime?: number | null;
 }
 
 export interface Incident {

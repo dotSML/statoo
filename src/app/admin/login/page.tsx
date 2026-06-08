@@ -2,6 +2,7 @@
 
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 export default function AdminLogin() {
   const [password, setPassword] = useState('');
@@ -67,7 +68,7 @@ export default function AdminLogin() {
               </button>
             </form>
 
-            <a href="/" className="login-back">← Back to status page</a>
+            <Link href="/" className="login-back">← Back to status page</Link>
           </div>
         </div>
       </main>

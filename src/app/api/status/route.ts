@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
-import { getServices, deriveOverallStatus, getIncidents } from '@/lib/repository';
+import { getServicesWithStats, deriveOverallStatus, getIncidents, ensureHealthChecksUpdated } from '@/lib/repository';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const services = await getServices();
+    await ensureHealthChecksUpdated();
+    const services = await getServicesWithStats();
     const activeIncidents = await getIncidents({ activeOnly: true });
     const overallStatus = deriveOverallStatus(services);
 

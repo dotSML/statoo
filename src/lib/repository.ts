@@ -3,6 +3,7 @@ import {
   Service, ServiceStatus, HealthCheckResult, UptimeDay,
   Incident, IncidentStatus, STATUS_SEVERITY,
 } from './types';
+import { checkHealth } from './health';
 
 /* ── Services ────────────────────────────────── */
 
@@ -118,7 +119,8 @@ export async function getUptimeDaysForService(serviceId: number, days: number = 
            WHEN 'operational' THEN 5
            ELSE 6
          END
-       ))[1] AS worst_status
+       ))[1] AS worst_status,
+       AVG(response_time) FILTER (WHERE response_time IS NOT NULL) AS avg_response_time
      FROM health_checks
      WHERE service_id = $1 AND checked_at >= NOW() - make_interval(days => $2)
      GROUP BY DATE(checked_at AT TIME ZONE 'UTC')
@@ -126,12 +128,15 @@ export async function getUptimeDaysForService(serviceId: number, days: number = 
     [serviceId, days]
   );
 
-  const statusMap = new Map<string, ServiceStatus>();
+  const statusMap = new Map<string, { status: ServiceStatus; avgResponseTime: number | null }>();
   for (const row of rows) {
     const dateStr = row.date instanceof Date
       ? row.date.toISOString().split('T')[0]
       : String(row.date);
-    statusMap.set(dateStr, row.worst_status as ServiceStatus);
+    statusMap.set(dateStr, {
+      status: row.worst_status as ServiceStatus,
+      avgResponseTime: row.avg_response_time ? Math.round(Number(row.avg_response_time)) : null
+    });
   }
 
   const result: UptimeDay[] = [];
@@ -140,9 +145,11 @@ export async function getUptimeDaysForService(serviceId: number, days: number = 
     const date = new Date(now);
     date.setDate(date.getDate() - i);
     const dateStr = date.toISOString().split('T')[0];
+    const dayData = statusMap.get(dateStr);
     result.push({
       date: dateStr,
-      status: statusMap.get(dateStr) || 'unknown',
+      status: dayData?.status || 'unknown',
+      avgResponseTime: dayData?.avgResponseTime ?? null,
     });
   }
   return result;
@@ -306,4 +313,107 @@ export function deriveOverallStatus(services: Service[]): ServiceStatus {
     }
   }
   return worst;
+}
+
+/* ── Service Statistics & Lazy Checking ──────────────────────────── */
+
+export async function getLastHealthCheckTime(): Promise<Date | null> {
+  await ensureMigrated();
+  const db = getPool();
+  const { rows } = await db.query(
+    `SELECT checked_at FROM health_checks ORDER BY checked_at DESC LIMIT 1`
+  );
+  return rows.length ? new Date(rows[0].checked_at) : null;
+}
+
+export async function runAllHealthChecks(): Promise<void> {
+  await ensureMigrated();
+  const services = await getServices();
+  const activeIncidents = await getIncidents({ activeOnly: true });
+
+  const promises = services.map(async (service) => {
+    if (!service.url) return;
+
+    try {
+      const result = await checkHealth(service.url);
+      await saveHealthCheck(service.id, result);
+
+      // Determine status: worst of active incidents and check status
+      const serviceIncidents = activeIncidents.filter(i => i.serviceId === service.id);
+      let newStatus = result.status;
+      for (const incident of serviceIncidents) {
+        if (STATUS_SEVERITY[incident.severity] < STATUS_SEVERITY[newStatus]) {
+          newStatus = incident.severity;
+        }
+      }
+
+      await updateService(service.id, { status: newStatus });
+    } catch (err) {
+      console.error(`Failed to run health check for service ${service.id}:`, err);
+    }
+  });
+
+  await Promise.all(promises);
+}
+
+export async function ensureHealthChecksUpdated(): Promise<void> {
+  const lastCheck = await getLastHealthCheckTime();
+  const now = new Date();
+  const shouldRun = !lastCheck || (now.getTime() - lastCheck.getTime() > 60_000);
+
+  if (shouldRun) {
+    await runAllHealthChecks();
+  }
+}
+
+export async function getServicesWithStats(): Promise<Service[]> {
+  const services = await getServices();
+  const promises = services.map(async (service) => {
+    if (!service.url) {
+      return {
+        ...service,
+        avgLatency: null,
+        uptimePercentage: 100.0,
+        uptimeDays: [],
+      };
+    }
+
+    const db = getPool();
+
+    // 1. Avg latency (last 7 days)
+    const latencyRes = await db.query(
+      `SELECT AVG(response_time) as avg_latency
+       FROM health_checks
+       WHERE service_id = $1 AND response_time IS NOT NULL AND checked_at >= NOW() - INTERVAL '7 days'`,
+      [service.id]
+    );
+    const avgLatency = latencyRes.rows[0]?.avg_latency
+      ? Math.round(Number(latencyRes.rows[0].avg_latency))
+      : null;
+
+    // 2. Uptime percentage (last 30 days)
+    const uptimeRes = await db.query(
+      `SELECT
+         COUNT(*) FILTER (WHERE status IN ('operational', 'degraded', 'maintenance'))::float /
+         NULLIF(COUNT(*), 0) * 100 as uptime_pct
+       FROM health_checks
+       WHERE service_id = $1 AND checked_at >= NOW() - INTERVAL '30 days'`,
+      [service.id]
+    );
+    const uptimePercentage = uptimeRes.rows[0]?.uptime_pct !== null && uptimeRes.rows[0]?.uptime_pct !== undefined
+      ? Number(Number(uptimeRes.rows[0].uptime_pct).toFixed(2))
+      : 100.0;
+
+    // 3. 90-day uptime history
+    const uptimeDays = await getUptimeDaysForService(service.id, 90);
+
+    return {
+      ...service,
+      avgLatency,
+      uptimePercentage,
+      uptimeDays,
+    };
+  });
+
+  return Promise.all(promises);
 }

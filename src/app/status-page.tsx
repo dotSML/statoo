@@ -106,24 +106,80 @@ export default function StatusPageClient({
         {hasServices && (
           <section className="checks-section fade-in fade-in-delay-3">
             <h2 className="section-title">Services</h2>
-            {services.map(service => (
-              <div key={service.id} className="check-row">
-                <div className="check-left">
-                  <div className="check-dot" data-status={service.status} />
-                  <div className="check-info">
-                    <span className="check-name">{service.name}</span>
-                    {service.description && (
-                      <span className="check-description">{service.description}</span>
-                    )}
+            <div className="services-grid">
+              {services.map(service => (
+                <div key={service.id} className="check-card">
+                  <div className="check-card-header">
+                    <div className="check-left">
+                      <div className="check-dot" data-status={service.status} />
+                      <div className="check-info">
+                        <div className="check-name-row">
+                          <span className="check-name">{service.name}</span>
+                          {service.url && (
+                            <a
+                              href={service.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="service-link"
+                            >
+                              <svg className="service-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
+                              </svg>
+                              {service.url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}
+                            </a>
+                          )}
+                        </div>
+                        {service.description && (
+                          <span className="check-description">{service.description}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="check-right">
+                      {service.avgLatency !== null && service.avgLatency !== undefined && (
+                        <span className="check-response-time">{service.avgLatency}ms avg</span>
+                      )}
+                      <span className="check-status-label" data-status={service.status}>
+                        {STATUS_LABELS[service.status]}
+                      </span>
+                    </div>
                   </div>
+
+                  {service.url && service.uptimeDays && service.uptimeDays.length > 0 && (
+                    <div className="uptime-section">
+                      <div className="uptime-header">
+                        <span className="section-title">Uptime History</span>
+                        <span className="uptime-percentage">
+                          {service.uptimePercentage !== undefined && service.uptimePercentage !== null
+                            ? `${service.uptimePercentage}%`
+                            : '100%'}
+                        </span>
+                      </div>
+                      <div className="uptime-bar-container">
+                        {service.uptimeDays.map((day) => (
+                          <div key={day.date} className="uptime-bar-segment" data-status={day.status}>
+                            <div className="tooltip">
+                              <strong>{formatTooltipDate(day.date)}</strong>
+                              <br />
+                              Status: {STATUS_LABELS[day.status]}
+                              {day.avgResponseTime !== null && day.avgResponseTime !== undefined && (
+                                <>
+                                  <br />
+                                  Avg Latency: {day.avgResponseTime}ms
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="uptime-legend">
+                        <span className="uptime-legend-label">90 days ago</span>
+                        <span className="uptime-legend-label">Today</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="check-right">
-                  <span className="check-status-label" data-status={service.status}>
-                    {STATUS_LABELS[service.status]}
-                  </span>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </section>
         )}
 
@@ -212,5 +268,13 @@ function formatTimestamp(iso: string): string {
     minute: '2-digit',
     second: '2-digit',
     hour12: false,
+  });
+}
+
+function formatTooltipDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
   });
 }

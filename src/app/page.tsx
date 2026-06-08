@@ -1,4 +1,4 @@
-import { getServices, deriveOverallStatus, getIncidents } from '@/lib/repository';
+import { getServicesWithStats, deriveOverallStatus, getIncidents, ensureHealthChecksUpdated } from '@/lib/repository';
 import StatusPageClient from './status-page';
 
 export const dynamic = 'force-dynamic';
@@ -7,7 +7,8 @@ export default async function Home() {
   const pageTitle = process.env.PAGE_TITLE || 'Status';
   const pageDescription = process.env.PAGE_DESCRIPTION || 'Current service status and uptime';
 
-  const services = await getServices();
+  await ensureHealthChecksUpdated();
+  const services = await getServicesWithStats();
   const activeIncidents = await getIncidents({ activeOnly: true });
   const recentIncidents = await getIncidents({ activeOnly: false, limit: 10 });
   const overallStatus = deriveOverallStatus(services);

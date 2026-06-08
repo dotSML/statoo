@@ -2,9 +2,10 @@
 
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   Service, Incident, ServiceStatus, IncidentStatus,
-  STATUS_LABELS, INCIDENT_STATUS_LABELS,
+  STATUS_LABELS,
 } from '@/lib/types';
 
 interface AdminDashboardProps {
@@ -19,6 +20,28 @@ export default function AdminDashboard({
   const router = useRouter();
   const [services, setServices] = useState(initialServices);
   const [incidents, setIncidents] = useState(initialIncidents);
+  const [refreshingChecks, setRefreshingChecks] = useState(false);
+
+  async function handleRefreshChecks() {
+    setRefreshingChecks(true);
+    try {
+      const res = await fetch('/api/services/check', { method: 'POST' });
+      if (res.ok) {
+        router.refresh();
+        const svcRes = await fetch('/api/services');
+        if (svcRes.ok) {
+          setServices(await svcRes.json());
+        }
+      } else {
+        alert('Failed to refresh health checks');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to refresh health checks');
+    } finally {
+      setRefreshingChecks(false);
+    }
+  }
 
   // Service form
   const [showServiceForm, setShowServiceForm] = useState(false);
@@ -163,7 +186,14 @@ export default function AdminDashboard({
               <p className="service-description">Manage services and incidents</p>
             </div>
             <div className="admin-header-actions">
-              <a href="/" className="btn btn-ghost">View Status Page</a>
+              <button
+                onClick={handleRefreshChecks}
+                className="btn btn-ghost"
+                disabled={refreshingChecks || services.length === 0}
+              >
+                {refreshingChecks ? 'Refreshing...' : 'Refresh Health Checks'}
+              </button>
+              <Link href="/" className="btn btn-ghost">View Status Page</Link>
               <button onClick={handleLogout} className="btn btn-ghost">Logout</button>
             </div>
           </div>
