@@ -22,6 +22,7 @@ export default function AdminDashboard({
   const [incidents, setIncidents] = useState(initialIncidents);
   const [refreshingChecks, setRefreshingChecks] = useState(false);
   const [sendingTestNotification, setSendingTestNotification] = useState(false);
+  const [clearingSubscriptions, setClearingSubscriptions] = useState(false);
   const [testNotificationMessage, setTestNotificationMessage] = useState<{
     tone: 'success' | 'error';
     text: string;
@@ -75,6 +76,36 @@ export default function AdminDashboard({
       });
     } finally {
       setSendingTestNotification(false);
+    }
+  }
+
+  async function handleClearSubscriptions() {
+    if (!confirm('Clear all saved push subscriptions? Devices will need to subscribe again.')) return;
+    setTestNotificationMessage(null);
+    setClearingSubscriptions(true);
+    try {
+      const res = await fetch('/api/push/clear', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        setTestNotificationMessage({
+          tone: 'error',
+          text: data.error || 'Failed to clear subscriptions.',
+        });
+        return;
+      }
+
+      setTestNotificationMessage({
+        tone: 'success',
+        text: `Cleared ${data.deleted} subscription${data.deleted === 1 ? '' : 's'}.`,
+      });
+    } catch (err) {
+      console.error(err);
+      setTestNotificationMessage({
+        tone: 'error',
+        text: 'Failed to clear subscriptions.',
+      });
+    } finally {
+      setClearingSubscriptions(false);
     }
   }
 
@@ -252,9 +283,16 @@ export default function AdminDashboard({
               <button
                 onClick={handleSendTestNotification}
                 className="btn btn-ghost"
-                disabled={sendingTestNotification}
+                disabled={sendingTestNotification || clearingSubscriptions}
               >
                 {sendingTestNotification ? 'Sending Test...' : 'Send Test Notification'}
+              </button>
+              <button
+                onClick={handleClearSubscriptions}
+                className="btn btn-ghost"
+                disabled={clearingSubscriptions || sendingTestNotification}
+              >
+                {clearingSubscriptions ? 'Clearing...' : 'Clear Subscriptions'}
               </button>
               <button
                 onClick={handleRefreshChecks}

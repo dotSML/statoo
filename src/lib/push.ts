@@ -1,18 +1,32 @@
 import webpush from 'web-push';
 import { getPool, ensureMigrated } from './db';
 
-const vapidEmail = 'mailto:admin@statoo.local';
+const vapidSubject = process.env.VAPID_SUBJECT?.trim() || 'mailto:admin@example.com';
 const vapidPublicKey = process.env.VAPID_PUBLIC_KEY ?? process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
 
-if (vapidPublicKey && vapidPrivateKey) {
+if (!process.env.VAPID_PUBLIC_KEY && process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY) {
+  console.warn(
+    'VAPID_PUBLIC_KEY is not set; falling back to NEXT_PUBLIC_VAPID_PUBLIC_KEY. ' +
+    'Set both and keep them identical to avoid JWT/signing mismatches.'
+  );
+}
+
+if (vapidPublicKey && vapidPrivateKey && isValidVapidSubject(vapidSubject)) {
   webpush.setVapidDetails(
-    vapidEmail,
+    vapidSubject,
     vapidPublicKey,
     vapidPrivateKey
   );
 } else {
-  console.warn('VAPID keys are missing from environment. Push notifications will not be sent.');
+  if (!isValidVapidSubject(vapidSubject)) {
+    console.warn(
+      `VAPID_SUBJECT "${vapidSubject}" is invalid. Use a "mailto:" or "https://" URI. ` +
+      'Push notifications will not be sent.'
+    );
+  } else {
+    console.warn('VAPID keys are missing from environment. Push notifications will not be sent.');
+  }
 }
 
 export interface PushKeys {
@@ -37,6 +51,10 @@ interface PushSendStats {
   total: number;
   sent: number;
   failed: number;
+}
+
+interface PushDeleteStats {
+  deleted: number;
 }
 
 /**
@@ -65,6 +83,17 @@ export async function deleteSubscription(endpoint: string): Promise<void> {
     'DELETE FROM push_subscriptions WHERE endpoint = $1',
     [endpoint]
   );
+}
+
+/**
+ * Remove all push subscriptions from the database.
+ */
+export async function deleteAllSubscriptions(): Promise<PushDeleteStats> {
+  await ensureMigrated();
+  const db = getPool();
+  await ensurePushTable();
+  const result = await db.query('DELETE FROM push_subscriptions');
+  return { deleted: result.rowCount ?? 0 };
 }
 
 /**
@@ -108,13 +137,7 @@ export async function sendTestNotification(): Promise<PushSendStats> {
 async function sendPushToAll(payload: PushPayload): Promise<PushSendStats> {
   await ensureMigrated();
   const db = getPool();
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS push_subscriptions (
-      endpoint TEXT PRIMARY KEY,
-      keys JSONB NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
+  await ensurePushTable();
 
   const { rows } = await db.query('SELECT endpoint, keys FROM push_subscriptions');
   if (rows.length === 0) {
@@ -142,11 +165,27 @@ async function sendPushToAll(payload: PushPayload): Promise<PushSendStats> {
       const statusCode = typeof err === 'object' && err && 'statusCode' in err
         ? (err as { statusCode?: number }).statusCode
         : undefined;
+      const endpoint = typeof err === 'object' && err && 'endpoint' in err
+        ? String((err as { endpoint?: string }).endpoint)
+        : '';
+      const body = typeof err === 'object' && err && 'body' in err
+        ? String((err as { body?: string }).body)
+        : '';
+      const badJwtFromApple = statusCode === 403
+        && endpoint.includes('web.push.apple.com')
+        && body.includes('BadJwtToken');
 
       // If the subscription is no longer active (410 Gone or 404 Not Found), clean it up from DB
       if (statusCode === 410 || statusCode === 404) {
         console.log(`Cleaning up expired subscription: ${row.endpoint}`);
         await deleteSubscription(row.endpoint);
+      } else if (badJwtFromApple) {
+        console.error(
+          'Apple rejected the VAPID JWT (BadJwtToken). ' +
+          'Check that VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY are from the same pair, ' +
+          'VAPID_SUBJECT is valid (mailto: or https://), and iOS devices re-subscribe after key changes.',
+          err
+        );
       } else {
         console.error(`Error sending push notification:`, err);
       }
@@ -156,4 +195,32 @@ async function sendPushToAll(payload: PushPayload): Promise<PushSendStats> {
 
   await Promise.allSettled(notificationPromises);
   return { total: rows.length, sent, failed };
+}
+
+async function ensurePushTable(): Promise<void> {
+  const db = getPool();
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      endpoint TEXT PRIMARY KEY,
+      keys JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+}
+
+function isValidVapidSubject(subject: string): boolean {
+  if (subject.startsWith('mailto:')) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(subject.slice('mailto:'.length));
+  }
+
+  if (subject.startsWith('https://')) {
+    try {
+      const url = new URL(subject);
+      return url.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
 }
