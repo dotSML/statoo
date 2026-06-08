@@ -44,6 +44,8 @@ export async function ensureMigrated(): Promise<void> {
       created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    ALTER TABLE services ADD COLUMN IF NOT EXISTS expected_status_code INTEGER NOT NULL DEFAULT 200;
+
     CREATE TABLE IF NOT EXISTS health_checks (
       id            SERIAL PRIMARY KEY,
       service_id    INTEGER REFERENCES services(id) ON DELETE CASCADE,

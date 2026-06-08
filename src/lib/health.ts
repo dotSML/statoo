@@ -1,6 +1,6 @@
 import { HealthCheckResult, ServiceStatus } from './types';
 
-export async function checkHealth(url: string | null): Promise<HealthCheckResult> {
+export async function checkHealth(url: string | null, expectedStatusCode: number = 200): Promise<HealthCheckResult> {
   if (!url) {
     return {
       status: 'unknown',
@@ -26,7 +26,7 @@ export async function checkHealth(url: string | null): Promise<HealthCheckResult
     clearTimeout(timeout);
     const responseTime = Date.now() - start;
 
-    const status = deriveStatus(response.status, responseTime);
+    const status = deriveStatus(response.status, responseTime, expectedStatusCode);
 
     return {
       status,
@@ -48,10 +48,16 @@ export async function checkHealth(url: string | null): Promise<HealthCheckResult
   }
 }
 
-function deriveStatus(statusCode: number, responseTime: number): ServiceStatus {
+function deriveStatus(statusCode: number, responseTime: number, expectedStatusCode: number): ServiceStatus {
+  const isExpected = expectedStatusCode === 200
+    ? (statusCode >= 200 && statusCode < 400)
+    : statusCode === expectedStatusCode;
+
+  if (isExpected) {
+    if (responseTime > 2000) return 'degraded';
+    return 'operational';
+  }
+
   if (statusCode >= 500) return 'major_outage';
-  if (statusCode >= 400) return 'partial_outage';
-  if (responseTime > 5000) return 'degraded';
-  if (responseTime > 2000) return 'degraded';
-  return 'operational';
+  return 'partial_outage';
 }

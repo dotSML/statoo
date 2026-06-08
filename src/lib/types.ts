@@ -20,6 +20,7 @@ export interface Service {
   status: ServiceStatus;
   sortOrder: number;
   createdAt: string;
+  expectedStatusCode: number;
   avgLatency?: number | null;
   uptimePercentage?: number | null;
   uptimeDays?: UptimeDay[];

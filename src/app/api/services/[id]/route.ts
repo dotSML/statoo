@@ -15,6 +15,17 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
+
+    if (body.expectedStatusCode !== undefined && body.expectedStatusCode !== null && body.expectedStatusCode !== '') {
+      const parsed = parseInt(String(body.expectedStatusCode), 10);
+      if (isNaN(parsed) || parsed < 100 || parsed > 599) {
+        return NextResponse.json({ error: 'Expected status code must be a valid HTTP status code (100-599)' }, { status: 400 });
+      }
+      body.expectedStatusCode = parsed;
+    } else if (body.expectedStatusCode === '') {
+      body.expectedStatusCode = 200;
+    }
+
     const service = await updateService(parseInt(id, 10), body);
 
     if (!service) {

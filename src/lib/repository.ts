@@ -11,7 +11,7 @@ export async function getServices(): Promise<Service[]> {
   await ensureMigrated();
   const db = getPool();
   const { rows } = await db.query(
-    `SELECT id, name, description, url, status, sort_order, created_at
+    `SELECT id, name, description, url, status, sort_order, created_at, expected_status_code
      FROM services ORDER BY sort_order ASC, id ASC`
   );
   return rows.map(mapService);
@@ -21,7 +21,7 @@ export async function getServiceById(id: number): Promise<Service | null> {
   await ensureMigrated();
   const db = getPool();
   const { rows } = await db.query(
-    `SELECT id, name, description, url, status, sort_order, created_at
+    `SELECT id, name, description, url, status, sort_order, created_at, expected_status_code
      FROM services WHERE id = $1`, [id]
   );
   return rows.length ? mapService(rows[0]) : null;
@@ -31,13 +31,14 @@ export async function createService(data: {
   name: string;
   description?: string;
   url?: string;
+  expectedStatusCode?: number;
 }): Promise<Service> {
   await ensureMigrated();
   const db = getPool();
   const { rows } = await db.query(
-    `INSERT INTO services (name, description, url)
-     VALUES ($1, $2, $3) RETURNING *`,
-    [data.name, data.description ?? null, data.url ?? null]
+    `INSERT INTO services (name, description, url, expected_status_code)
+     VALUES ($1, $2, $3, $4) RETURNING *`,
+    [data.name, data.description ?? null, data.url ?? null, data.expectedStatusCode ?? 200]
   );
   return mapService(rows[0]);
 }
@@ -48,6 +49,7 @@ export async function updateService(id: number, data: {
   url?: string;
   status?: ServiceStatus;
   sortOrder?: number;
+  expectedStatusCode?: number;
 }): Promise<Service | null> {
   await ensureMigrated();
   const db = getPool();
@@ -61,6 +63,7 @@ export async function updateService(id: number, data: {
   if (data.url !== undefined) { sets.push(`url = $${idx++}`); values.push(data.url); }
   if (data.status !== undefined) { sets.push(`status = $${idx++}`); values.push(data.status); }
   if (data.sortOrder !== undefined) { sets.push(`sort_order = $${idx++}`); values.push(data.sortOrder); }
+  if (data.expectedStatusCode !== undefined) { sets.push(`expected_status_code = $${idx++}`); values.push(data.expectedStatusCode); }
 
   if (sets.length === 0) return getServiceById(id);
 
@@ -88,6 +91,7 @@ function mapService(row: Record<string, unknown>): Service {
     status: row.status as ServiceStatus,
     sortOrder: row.sort_order as number,
     createdAt: (row.created_at as Date).toISOString(),
+    expectedStatusCode: (row.expected_status_code as number) ?? 200,
   };
 }
 
@@ -335,7 +339,7 @@ export async function runAllHealthChecks(): Promise<void> {
     if (!service.url) return;
 
     try {
-      const result = await checkHealth(service.url);
+      const result = await checkHealth(service.url, service.expectedStatusCode);
       await saveHealthCheck(service.id, result);
 
       // Determine status: worst of active incidents and check status

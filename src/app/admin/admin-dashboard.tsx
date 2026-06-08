@@ -45,9 +45,12 @@ export default function AdminDashboard({
 
   // Service form
   const [showServiceForm, setShowServiceForm] = useState(false);
+  const [editingService, setEditingService] = useState<Service | null>(null);
   const [svcName, setSvcName] = useState('');
   const [svcDesc, setSvcDesc] = useState('');
   const [svcUrl, setSvcUrl] = useState('');
+  const [svcExpected, setSvcExpected] = useState('200');
+  const [svcStatus, setSvcStatus] = useState<ServiceStatus>('operational');
   const [svcLoading, setSvcLoading] = useState(false);
 
   // Incident form
@@ -58,32 +61,67 @@ export default function AdminDashboard({
   const [incSeverity, setIncSeverity] = useState<ServiceStatus>('degraded');
   const [incLoading, setIncLoading] = useState(false);
 
-  // Edit service status
-  const [editingServiceId, setEditingServiceId] = useState<number | null>(null);
-
   async function handleLogout() {
     await fetch('/api/auth', { method: 'DELETE' });
     router.push('/admin/login');
   }
 
-  async function handleAddService(e: FormEvent) {
+  async function handleSubmitService(e: FormEvent) {
     e.preventDefault();
     setSvcLoading(true);
+    const payload = {
+      name: svcName,
+      description: svcDesc || null,
+      url: svcUrl || null,
+      expectedStatusCode: parseInt(svcExpected, 10) || 200,
+      status: svcStatus,
+    };
     try {
-      const res = await fetch('/api/services', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: svcName, description: svcDesc, url: svcUrl }),
-      });
-      if (res.ok) {
-        const service = await res.json();
-        setServices(prev => [...prev, service]);
-        setSvcName(''); setSvcDesc(''); setSvcUrl('');
-        setShowServiceForm(false);
+      if (editingService) {
+        const res = await fetch(`/api/services/${editingService.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const updated = await res.json();
+          setServices(prev => prev.map(s => s.id === editingService.id ? updated : s));
+          resetServiceForm();
+        } else {
+          const errData = await res.json();
+          alert(errData.error || 'Failed to update service');
+        }
+      } else {
+        const res = await fetch('/api/services', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const service = await res.json();
+          setServices(prev => [...prev, service]);
+          resetServiceForm();
+        } else {
+          const errData = await res.json();
+          alert(errData.error || 'Failed to add service');
+        }
       }
+    } catch (err) {
+      console.error(err);
+      alert('An error occurred');
     } finally {
       setSvcLoading(false);
     }
+  }
+
+  function resetServiceForm() {
+    setSvcName('');
+    setSvcDesc('');
+    setSvcUrl('');
+    setSvcExpected('200');
+    setSvcStatus('operational');
+    setEditingService(null);
+    setShowServiceForm(false);
   }
 
   async function handleDeleteService(id: number) {
@@ -92,19 +130,6 @@ export default function AdminDashboard({
     if (res.ok) {
       setServices(prev => prev.filter(s => s.id !== id));
       setIncidents(prev => prev.filter(i => i.serviceId !== id));
-    }
-  }
-
-  async function handleUpdateServiceStatus(id: number, status: ServiceStatus) {
-    const res = await fetch(`/api/services/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
-    });
-    if (res.ok) {
-      const updated = await res.json();
-      setServices(prev => prev.map(s => s.id === id ? updated : s));
-      setEditingServiceId(null);
     }
   }
 
@@ -204,16 +229,25 @@ export default function AdminDashboard({
           <div className="admin-section-header">
             <h2 className="section-title">Services</h2>
             <button
-              onClick={() => setShowServiceForm(!showServiceForm)}
+              onClick={() => {
+                if (showServiceForm) {
+                  resetServiceForm();
+                } else {
+                  setShowServiceForm(true);
+                }
+              }}
               className="btn btn-primary btn-sm"
             >
               {showServiceForm ? 'Cancel' : '+ Add Service'}
             </button>
           </div>
 
-          {/* Add Service Form */}
+          {/* Add/Edit Service Form */}
           {showServiceForm && (
-            <form onSubmit={handleAddService} className="admin-form">
+            <form onSubmit={handleSubmitService} className="admin-form">
+              <h3 className="form-title" style={{ fontSize: '15px', fontWeight: '600', marginBottom: '8px', color: 'var(--text-primary)' }}>
+                {editingService ? `Edit Service: ${editingService.name}` : 'Add New Service'}
+              </h3>
               <div className="form-row">
                 <div className="form-group">
                   <label htmlFor="svc-name" className="form-label">Name *</label>
@@ -239,20 +273,59 @@ export default function AdminDashboard({
                   />
                 </div>
               </div>
-              <div className="form-group">
-                <label htmlFor="svc-desc" className="form-label">Description</label>
-                <input
-                  id="svc-desc"
-                  type="text"
-                  value={svcDesc}
-                  onChange={e => setSvcDesc(e.target.value)}
-                  className="form-input"
-                  placeholder="Brief description"
-                />
+              <div className="form-row" style={{ gridTemplateColumns: '1fr' }}>
+                <div className="form-group">
+                  <label htmlFor="svc-desc" className="form-label">Description</label>
+                  <input
+                    id="svc-desc"
+                    type="text"
+                    value={svcDesc}
+                    onChange={e => setSvcDesc(e.target.value)}
+                    className="form-input"
+                    placeholder="Brief description"
+                  />
+                </div>
               </div>
-              <button type="submit" className="btn btn-primary" disabled={svcLoading}>
-                {svcLoading ? 'Adding...' : 'Add Service'}
-              </button>
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="svc-expected" className="form-label">Expected Status Code</label>
+                  <input
+                    id="svc-expected"
+                    type="number"
+                    value={svcExpected}
+                    onChange={e => setSvcExpected(e.target.value)}
+                    className="form-input"
+                    placeholder="200"
+                    min="100"
+                    max="599"
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="svc-status" className="form-label">
+                    Status {svcUrl && <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>(Note: health check will overwrite)</span>}
+                  </label>
+                  <select
+                    id="svc-status"
+                    value={svcStatus}
+                    onChange={e => setSvcStatus(e.target.value as ServiceStatus)}
+                    className="form-input form-select"
+                  >
+                    <option value="operational">Operational</option>
+                    <option value="degraded">Degraded Performance</option>
+                    <option value="partial_outage">Partial Outage</option>
+                    <option value="major_outage">Major Outage</option>
+                    <option value="maintenance">Maintenance</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                <button type="submit" className="btn btn-primary" disabled={svcLoading}>
+                  {svcLoading ? (editingService ? 'Saving...' : 'Adding...') : (editingService ? 'Save Changes' : 'Add Service')}
+                </button>
+                <button type="button" onClick={resetServiceForm} className="btn btn-ghost">
+                  Cancel
+                </button>
+              </div>
             </form>
           )}
 
@@ -266,54 +339,51 @@ export default function AdminDashboard({
                 <div className="admin-list-left">
                   <div className="check-dot" data-status={service.status} />
                   <div className="admin-list-info">
-                    <span className="admin-list-name">{service.name}</span>
+                    <span className="admin-list-name">
+                      {service.name}
+                      {service.url && (
+                        <span className="admin-list-url-badge" style={{
+                          fontSize: '11px',
+                          color: 'var(--text-tertiary)',
+                          marginLeft: '8px',
+                          fontWeight: 'normal',
+                        }}>
+                          ({service.url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}
+                          {service.expectedStatusCode && service.expectedStatusCode !== 200 ? ` → ${service.expectedStatusCode}` : ''})
+                        </span>
+                      )}
+                    </span>
                     {service.description && (
                       <span className="admin-list-desc">{service.description}</span>
                     )}
                   </div>
                 </div>
                 <div className="admin-list-actions">
-                  {editingServiceId === service.id ? (
-                    <div className="status-picker">
-                      {(['operational', 'degraded', 'partial_outage', 'major_outage', 'maintenance'] as ServiceStatus[]).map(status => (
-                        <button
-                          key={status}
-                          className="status-pick-btn"
-                          data-status={status}
-                          onClick={() => handleUpdateServiceStatus(service.id, status)}
-                        >
-                          <div className="check-dot" data-status={status} />
-                          <span>{STATUS_LABELS[status].split(' ')[0]}</span>
-                        </button>
-                      ))}
-                      <button
-                        className="btn btn-ghost btn-xs"
-                        onClick={() => setEditingServiceId(null)}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <span className="check-status-label" data-status={service.status}>
-                        {STATUS_LABELS[service.status]}
-                      </span>
-                      <button
-                        className="btn btn-ghost btn-xs"
-                        onClick={() => setEditingServiceId(service.id)}
-                        title="Change status"
-                      >
-                        ✎
-                      </button>
-                      <button
-                        className="btn btn-ghost btn-xs btn-danger"
-                        onClick={() => handleDeleteService(service.id)}
-                        title="Delete service"
-                      >
-                        ✕
-                      </button>
-                    </>
-                  )}
+                  <span className="check-status-label" data-status={service.status}>
+                    {STATUS_LABELS[service.status]}
+                  </span>
+                  <button
+                    className="btn btn-ghost btn-xs"
+                    onClick={() => {
+                      setEditingService(service);
+                      setSvcName(service.name);
+                      setSvcDesc(service.description || '');
+                      setSvcUrl(service.url || '');
+                      setSvcExpected((service.expectedStatusCode || 200).toString());
+                      setSvcStatus(service.status);
+                      setShowServiceForm(true);
+                    }}
+                    title="Edit service"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    className="btn btn-ghost btn-xs btn-danger"
+                    onClick={() => handleDeleteService(service.id)}
+                    title="Delete service"
+                  >
+                    ✕
+                  </button>
                 </div>
               </div>
             ))}
