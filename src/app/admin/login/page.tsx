@@ -39,6 +39,9 @@ export default function AdminLogin() {
       <main className="page-container">
         <div className="login-container fade-in">
           <div className="login-card">
+            <div className="login-logo-container">
+              <img src="/icon.png" alt="Statoo Logo" className="login-logo" />
+            </div>
             <h1 className="login-title">Admin Login</h1>
             <p className="login-subtitle">Enter your admin password to continue</p>
 

@@ -207,6 +207,8 @@ export async function createIncident(data: {
   await ensureMigrated();
   const db = getPool();
 
+  const service = await getServiceById(data.serviceId);
+
   const { rows } = await db.query(
     `INSERT INTO incidents (service_id, title, message, severity)
      VALUES ($1, $2, $3, $4) RETURNING *`,
@@ -220,9 +222,21 @@ export async function createIncident(data: {
   );
 
   const incident = mapIncident(rows[0]);
-  // Fetch service name
-  const svc = await getServiceById(data.serviceId);
-  incident.serviceName = svc?.name ?? undefined;
+  incident.serviceName = service?.name ?? undefined;
+
+  if (
+    service &&
+    service.status === 'operational' &&
+    (data.severity === 'major_outage' || data.severity === 'partial_outage' || data.severity === 'degraded')
+  ) {
+    try {
+      const { notifyOutage } = await import('./push');
+      await notifyOutage(service.name, data.severity);
+    } catch (pushErr) {
+      console.error(`Failed to send push notification for manual incident on ${service.name}:`, pushErr);
+    }
+  }
+
   return incident;
 }
 
@@ -351,7 +365,20 @@ export async function runAllHealthChecks(): Promise<void> {
         }
       }
 
+      const oldStatus = service.status;
       await updateService(service.id, { status: newStatus });
+
+      if (
+        oldStatus === 'operational' &&
+        (newStatus === 'major_outage' || newStatus === 'partial_outage' || newStatus === 'degraded')
+      ) {
+        try {
+          const { notifyOutage } = await import('./push');
+          await notifyOutage(service.name, newStatus);
+        } catch (pushErr) {
+          console.error(`Failed to send push notification for automated check on ${service.name}:`, pushErr);
+        }
+      }
     } catch (err) {
       console.error(`Failed to run health check for service ${service.id}:`, err);
     }

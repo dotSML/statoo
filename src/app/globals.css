@@ -99,6 +99,34 @@ a {
   gap: 8px;
 }
 
+.header-logo-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.login-logo-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.login-logo {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
 .service-name {
   font-size: 28px;
   font-weight: 700;
@@ -1404,4 +1432,128 @@ a {
     gap: 8px;
     text-align: center;
   }
+
+  .pwa-banner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    padding: 16px;
+  }
+  
+  .pwa-banner-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+  
+  .pwa-banner-btn {
+    flex: 1;
+    text-align: center;
+  }
 }
+
+/* ── PWA Notification Banner ────────────────── */
+.pwa-banner {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-top: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.pwa-banner:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: var(--bg-card-hover);
+}
+
+.pwa-banner-content {
+  flex: 1;
+}
+
+.pwa-banner-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pwa-banner-title-icon {
+  color: var(--status-operational);
+  display: inline-flex;
+}
+
+.pwa-banner-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.pwa-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pwa-banner-btn {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  text-align: center;
+}
+
+.pwa-banner-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.pwa-banner-btn:active {
+  transform: translateY(0);
+}
+
+.pwa-banner-btn-secondary {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.pwa-banner-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Share indicator popup for Safari iOS installation instructions */
+.pwa-share-instruction {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed var(--border-subtle);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pwa-share-icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.5;
+  color: var(--text-secondary);
+}
+

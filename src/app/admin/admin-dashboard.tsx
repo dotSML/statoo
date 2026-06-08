@@ -206,9 +206,12 @@ export default function AdminDashboard({
         {/* Admin Header */}
         <header className="header fade-in">
           <div className="admin-header">
-            <div>
-              <h1 className="service-name">Admin Dashboard</h1>
-              <p className="service-description">Manage services and incidents</p>
+            <div className="header-logo-row">
+              <img src="/icon.png" alt="Statoo Logo" className="header-logo" />
+              <div>
+                <h1 className="service-name">Admin Dashboard</h1>
+                <p className="service-description">Manage services and incidents</p>
+              </div>
             </div>
             <div className="admin-header-actions">
               <button

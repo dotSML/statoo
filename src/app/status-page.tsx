@@ -29,6 +29,101 @@ export default function StatusPageClient({
   const [overallStatus, setOverallStatus] = useState(initialOverall);
   const [lastChecked, setLastChecked] = useState(new Date().toISOString());
 
+  // PWA & Notification States
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [subLoading, setSubLoading] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<string | null>(null);
+  const [swSupported, setSwSupported] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const standalone = (window.navigator as any).standalone || window.matchMedia('(display-mode: standalone)').matches;
+      setIsStandalone(!!standalone);
+
+      const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+      setIsIOS(ios);
+
+      const supported = 'serviceWorker' in navigator && 'PushManager' in window;
+      setSwSupported(supported);
+
+      if (supported) {
+        setNotificationPermission(Notification.permission);
+        navigator.serviceWorker.register('/sw.js', { scope: '/' })
+          .then(async (registration) => {
+            const subscription = await registration.pushManager.getSubscription();
+            setIsSubscribed(!!subscription);
+          })
+          .catch((err) => console.error('Service Worker registration failed:', err));
+      }
+    }
+  }, []);
+
+  const handleSubscribe = async () => {
+    if (!swSupported) return;
+    setSubLoading(true);
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      if (permission !== 'granted') {
+        alert('Notification permission was denied. Please enable notifications in your browser settings.');
+        return;
+      }
+
+      const registration = await navigator.serviceWorker.ready;
+      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      if (!vapidKey) {
+        throw new Error('VAPID public key is missing.');
+      }
+
+      const convertedKey = urlBase64ToUint8Array(vapidKey);
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: convertedKey
+      });
+
+      const res = await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(subscription)
+      });
+
+      if (res.ok) {
+        setIsSubscribed(true);
+      } else {
+        alert('Failed to register subscription on the server.');
+      }
+    } catch (err) {
+      console.error('Subscription failed:', err);
+      alert('Subscription failed: ' + (err as Error).message);
+    } finally {
+      setSubLoading(false);
+    }
+  };
+
+  const handleUnsubscribe = async () => {
+    if (!swSupported) return;
+    setSubLoading(true);
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription) {
+        await subscription.unsubscribe();
+        await fetch('/api/push/unsubscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: subscription.endpoint })
+        });
+      }
+      setIsSubscribed(false);
+    } catch (err) {
+      console.error('Unsubscription failed:', err);
+    } finally {
+      setSubLoading(false);
+    }
+  };
+
   const refresh = useCallback(async () => {
     try {
       const res = await fetch('/api/status', { cache: 'no-store' });
@@ -57,8 +152,13 @@ export default function StatusPageClient({
         {/* Header */}
         <header className="header fade-in">
           <div className="header-content">
-            <h1 className="service-name">{pageTitle}</h1>
-            <p className="service-description">{pageDescription}</p>
+            <div className="header-logo-row">
+              <img src="/icon.png" alt="Statoo Logo" className="header-logo" />
+              <div>
+                <h1 className="service-name">{pageTitle}</h1>
+                <p className="service-description">{pageDescription}</p>
+              </div>
+            </div>
           </div>
         </header>
 
@@ -75,9 +175,58 @@ export default function StatusPageClient({
           </div>
         </div>
 
+        {/* PWA Notification Control Banner */}
+        {swSupported && (
+          <div className="pwa-banner fade-in fade-in-delay-2">
+            <div className="pwa-banner-content">
+              <h3 className="pwa-banner-title">
+                <svg className="pwa-banner-title-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+                Outage Alerts
+              </h3>
+              <p className="pwa-banner-desc">
+                {isSubscribed 
+                  ? "You are subscribed to receive push notifications when services go offline."
+                  : "Get push notifications on your device as soon as a service goes down."
+                }
+              </p>
+              {isIOS && !isStandalone && (
+                <div className="pwa-share-instruction">
+                  <svg className="pwa-share-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/>
+                  </svg>
+                  <span>To enable alerts on your iPhone, tap <strong>Share</strong> and select <strong>Add to Home Screen</strong>.</span>
+                </div>
+              )}
+            </div>
+            {(!isIOS || isStandalone) && (
+              <div className="pwa-banner-actions">
+                {isSubscribed ? (
+                  <button 
+                    onClick={handleUnsubscribe} 
+                    disabled={subLoading}
+                    className="pwa-banner-btn pwa-banner-btn-secondary"
+                  >
+                    {subLoading ? 'Please wait...' : 'Mute Alerts'}
+                  </button>
+                ) : (
+                  <button 
+                    onClick={handleSubscribe} 
+                    disabled={subLoading}
+                    className="pwa-banner-btn"
+                  >
+                    {subLoading ? 'Please wait...' : 'Notify Me'}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Active Incidents */}
         {activeIncidents.length > 0 && (
-          <section className="incidents-section fade-in fade-in-delay-2">
+          <section className="incidents-section fade-in fade-in-delay-3">
             <h2 className="section-title">Active Incidents</h2>
             <div className="incidents-list">
               {activeIncidents.map(incident => (
@@ -280,4 +429,19 @@ function formatTooltipDate(dateStr: string): string {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding)
+    .replace(/\-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
 }
