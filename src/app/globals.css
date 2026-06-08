@@ -457,6 +457,10 @@ a {
   color: var(--text-tertiary);
 }
 
+.mobile-legend-text {
+  display: none;
+}
+
 /* ── Check Details ──────────────────────────── */
 
 .checks-section {
@@ -1226,63 +1230,178 @@ a {
 /* ── Responsive ─────────────────────────────── */
 
 @media (max-width: 600px) {
+  .page-container {
+    padding: 0 16px 32px;
+  }
+
   .header {
-    padding-top: 32px;
+    padding-top: 24px;
+  }
+
+  .status-banner,
+  .checks-section,
+  .incidents-section,
+  .recent-incidents-section {
+    margin-top: 24px;
   }
 
   .service-name {
-    font-size: 22px;
+    font-size: 24px;
+    letter-spacing: -0.4px;
   }
 
-  .metrics-grid {
-    grid-template-columns: 1fr;
+  .service-description {
+    font-size: 14px;
   }
 
   .status-banner {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+  }
+
+  .status-label {
+    font-size: 15px;
+  }
+
+  /* Service check-card layout */
+  .check-card {
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .check-card-header {
     flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .check-left {
     align-items: flex-start;
     gap: 12px;
   }
 
-  .footer-content {
+  .check-name-row {
     flex-direction: column;
-    gap: 8px;
-    text-align: center;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .service-link {
+    font-size: 12px;
+  }
+
+  .check-right {
+    width: 100%;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 4px;
+    border-top: 1px solid var(--border-subtle);
+    padding-top: 12px;
+  }
+
+  .check-status-label {
+    white-space: nowrap;
+    font-size: 12px;
+    padding: 3px 8px;
+  }
+
+  .check-response-time {
+    font-size: 12px;
+  }
+
+  /* Uptime History & Legend */
+  .uptime-section {
+    margin-top: 20px;
+  }
+
+  .uptime-bar-segment:nth-child(-n+60) {
+    display: none;
+  }
+
+  .desktop-legend-text {
+    display: none;
+  }
+
+  .mobile-legend-text {
+    display: inline;
+  }
+
+  /* Incident card layouts */
+  .incident-card {
+    padding: 16px;
+  }
+
+  .incident-title-row,
+  .incident-meta {
+    flex-wrap: wrap;
+  }
+
+  /* Form & Login elements */
+  .login-card {
+    padding: 24px;
   }
 
   .form-row {
     grid-template-columns: 1fr;
   }
 
+  .admin-form .btn {
+    flex: 1;
+  }
+
+  /* Admin Header */
   .admin-header {
     flex-direction: column;
     gap: 16px;
+    width: 100%;
   }
 
+  .admin-header-actions {
+    flex-direction: column;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .admin-header-actions .btn,
+  .admin-header-actions a {
+    width: 100%;
+  }
+
+  /* Admin Lists */
   .admin-list-item {
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
   }
 
+  .admin-list-left {
+    width: 100%;
+  }
+
   .admin-list-actions {
     width: 100%;
-    justify-content: flex-end;
+    justify-content: space-between;
+    border-top: 1px solid var(--border-subtle);
+    padding-top: 10px;
+    margin-top: 4px;
   }
 
-  .check-row {
+  .admin-list-url-badge {
+    display: block;
+    margin-left: 0 !important;
+    margin-top: 2px;
+  }
+
+  .admin-list-name {
+    white-space: normal;
+  }
+
+  /* Footer wrapping */
+  .footer-content {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-  }
-
-  .check-right {
-    width: 100%;
-    justify-content: flex-end;
-  }
-
-  .status-picker {
-    flex-direction: column;
-    align-items: flex-start;
+    gap: 8px;
+    text-align: center;
   }
 }

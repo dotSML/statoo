@@ -172,7 +172,10 @@ export default function StatusPageClient({
                         ))}
                       </div>
                       <div className="uptime-legend">
-                        <span className="uptime-legend-label">90 days ago</span>
+                        <span className="uptime-legend-label">
+                          <span className="desktop-legend-text">90 days ago</span>
+                          <span className="mobile-legend-text">30 days ago</span>
+                        </span>
                         <span className="uptime-legend-label">Today</span>
                       </div>
                     </div>
