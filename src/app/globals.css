@@ -1098,6 +1098,19 @@ a {
   gap: 8px;
 }
 
+.admin-header-feedback {
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.admin-header-feedback--success {
+  color: var(--status-operational);
+}
+
+.admin-header-feedback--error {
+  color: var(--status-major);
+}
+
 .admin-section {
   margin-top: 32px;
 }
@@ -1556,4 +1569,3 @@ a {
   stroke-width: 2.5;
   color: var(--text-secondary);
 }
-

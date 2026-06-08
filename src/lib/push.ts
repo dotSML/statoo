@@ -25,6 +25,20 @@ export interface PushSubscriptionInput {
   keys: PushKeys;
 }
 
+interface PushPayload {
+  title: string;
+  body: string;
+  icon?: string;
+  badge?: string;
+  url?: string;
+}
+
+interface PushSendStats {
+  total: number;
+  sent: number;
+  failed: number;
+}
+
 /**
  * Save a push subscription to the database.
  */
@@ -57,12 +71,6 @@ export async function deleteSubscription(endpoint: string): Promise<void> {
  * Send a push notification to all stored subscriptions when a service goes down.
  */
 export async function notifyOutage(serviceName: string, status: string): Promise<void> {
-  await ensureMigrated();
-  const db = getPool();
-
-  const { rows } = await db.query('SELECT endpoint, keys FROM push_subscriptions');
-  if (rows.length === 0) return;
-
   const statusMap: Record<string, string> = {
     major_outage: 'Major Outage 🔴',
     partial_outage: 'Partial Outage 🟡',
@@ -79,25 +87,73 @@ export async function notifyOutage(serviceName: string, status: string): Promise
     url: '/',
   };
 
+  await sendPushToAll(payload);
+}
+
+/**
+ * Send an admin-triggered test push notification to all stored subscriptions.
+ */
+export async function sendTestNotification(): Promise<PushSendStats> {
+  const payload: PushPayload = {
+    title: 'Test Notification from Statoo',
+    body: 'Push notifications are configured correctly.',
+    icon: '/icon-192x192.png',
+    badge: '/icon-192x192.png',
+    url: '/admin',
+  };
+
+  return sendPushToAll(payload);
+}
+
+async function sendPushToAll(payload: PushPayload): Promise<PushSendStats> {
+  await ensureMigrated();
+  const db = getPool();
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      endpoint TEXT PRIMARY KEY,
+      keys JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  const { rows } = await db.query('SELECT endpoint, keys FROM push_subscriptions');
+  if (rows.length === 0) {
+    return { total: 0, sent: 0, failed: 0 };
+  }
+
+  let sent = 0;
+  let failed = 0;
+
   const notificationPromises = rows.map(async (row) => {
+    const subscription = {
+      endpoint: row.endpoint as string,
+      keys: typeof row.keys === 'string'
+        ? JSON.parse(row.keys)
+        : row.keys as PushKeys,
+    };
+
     try {
       await webpush.sendNotification(
-        {
-          endpoint: row.endpoint,
-          keys: row.keys,
-        },
+        subscription,
         JSON.stringify(payload)
       );
-    } catch (err: any) {
+      sent += 1;
+    } catch (err: unknown) {
+      const statusCode = typeof err === 'object' && err && 'statusCode' in err
+        ? (err as { statusCode?: number }).statusCode
+        : undefined;
+
       // If the subscription is no longer active (410 Gone or 404 Not Found), clean it up from DB
-      if (err.statusCode === 410 || err.statusCode === 404) {
+      if (statusCode === 410 || statusCode === 404) {
         console.log(`Cleaning up expired subscription: ${row.endpoint}`);
         await deleteSubscription(row.endpoint);
       } else {
         console.error(`Error sending push notification:`, err);
       }
+      failed += 1;
     }
   });
 
   await Promise.allSettled(notificationPromises);
+  return { total: rows.length, sent, failed };
 }

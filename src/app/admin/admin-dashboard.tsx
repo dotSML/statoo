@@ -21,6 +21,11 @@ export default function AdminDashboard({
   const [services, setServices] = useState(initialServices);
   const [incidents, setIncidents] = useState(initialIncidents);
   const [refreshingChecks, setRefreshingChecks] = useState(false);
+  const [sendingTestNotification, setSendingTestNotification] = useState(false);
+  const [testNotificationMessage, setTestNotificationMessage] = useState<{
+    tone: 'success' | 'error';
+    text: string;
+  } | null>(null);
 
   async function handleRefreshChecks() {
     setRefreshingChecks(true);
@@ -40,6 +45,36 @@ export default function AdminDashboard({
       alert('Failed to refresh health checks');
     } finally {
       setRefreshingChecks(false);
+    }
+  }
+
+  async function handleSendTestNotification() {
+    setTestNotificationMessage(null);
+    setSendingTestNotification(true);
+    try {
+      const res = await fetch('/api/push/test', { method: 'POST' });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setTestNotificationMessage({
+          tone: 'error',
+          text: data.error || 'Failed to send test notification.',
+        });
+        return;
+      }
+
+      setTestNotificationMessage({
+        tone: 'success',
+        text: `Sent test notification to ${data.sent}/${data.total} subscribers.`,
+      });
+    } catch (err) {
+      console.error(err);
+      setTestNotificationMessage({
+        tone: 'error',
+        text: 'Failed to send test notification.',
+      });
+    } finally {
+      setSendingTestNotification(false);
     }
   }
 
@@ -215,6 +250,13 @@ export default function AdminDashboard({
             </div>
             <div className="admin-header-actions">
               <button
+                onClick={handleSendTestNotification}
+                className="btn btn-ghost"
+                disabled={sendingTestNotification}
+              >
+                {sendingTestNotification ? 'Sending Test...' : 'Send Test Notification'}
+              </button>
+              <button
                 onClick={handleRefreshChecks}
                 className="btn btn-ghost"
                 disabled={refreshingChecks || services.length === 0}
@@ -225,6 +267,11 @@ export default function AdminDashboard({
               <button onClick={handleLogout} className="btn btn-ghost">Logout</button>
             </div>
           </div>
+          {testNotificationMessage && (
+            <p className={`admin-header-feedback admin-header-feedback--${testNotificationMessage.tone}`}>
+              {testNotificationMessage.text}
+            </p>
+          )}
         </header>
 
         {/* Services Section */}
