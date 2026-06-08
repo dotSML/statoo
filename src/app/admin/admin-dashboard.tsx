@@ -279,6 +279,9 @@ export default function AdminDashboard({
                 <p className="service-description">Manage services and incidents</p>
               </div>
             </div>
+            <div className="mobile-route-switch">
+              <Link href="/" className="btn btn-ghost btn-sm btn-full">Back to Status Page</Link>
+            </div>
             <div className="admin-header-actions">
               <button
                 onClick={handleSendTestNotification}

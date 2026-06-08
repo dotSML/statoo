@@ -99,6 +99,10 @@ a {
   gap: 8px;
 }
 
+.mobile-route-switch {
+  display: none;
+}
+
 .header-logo-row {
   display: flex;
   align-items: center;
@@ -1293,6 +1297,12 @@ a {
 
   .service-description {
     font-size: 14px;
+  }
+
+  .mobile-route-switch {
+    display: flex;
+    width: 100%;
+    margin-top: 6px;
   }
 
   .status-banner {

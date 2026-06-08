@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import {
   Service, ServiceStatus, Incident,
   STATUS_LABELS, INCIDENT_STATUS_LABELS,
@@ -158,6 +159,9 @@ export default function StatusPageClient({
                 <h1 className="service-name">{pageTitle}</h1>
                 <p className="service-description">{pageDescription}</p>
               </div>
+            </div>
+            <div className="mobile-route-switch">
+              <Link href="/admin" className="btn btn-ghost btn-sm btn-full">Go to Admin Panel</Link>
             </div>
           </div>
         </header>
