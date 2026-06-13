@@ -1,61 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import {
+  ApiError,
+  handleAdminApi,
+  handleApi,
+  readJsonObject,
+} from '@/lib/api';
 import { getIncidents, createIncident } from '@/lib/repository';
-import { ServiceStatus } from '@/lib/types';
+import { parseCreateIncident } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
-  try {
+  return handleApi('Failed to fetch incidents', async () => {
     const activeOnly = request.nextUrl.searchParams.get('active') === 'true';
     const limitStr = request.nextUrl.searchParams.get('limit');
-    const limit = limitStr ? parseInt(limitStr, 10) : undefined;
+    const limit = parseLimit(limitStr);
 
     const incidents = await getIncidents({ activeOnly, limit });
     return NextResponse.json(incidents);
-  } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
-  }
+  });
 }
 
-const VALID_SEVERITIES: ServiceStatus[] = [
-  'degraded', 'partial_outage', 'major_outage', 'maintenance',
-];
-
 export async function POST(request: Request) {
-  try {
-    await requireAuth();
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  try {
-    const body = await request.json();
-    const { serviceId, title, message, severity } = body;
-
-    if (!serviceId || !title || !message || !severity) {
-      return NextResponse.json(
-        { error: 'serviceId, title, message, and severity are required' },
-        { status: 400 }
-      );
-    }
-
-    if (!VALID_SEVERITIES.includes(severity)) {
-      return NextResponse.json(
-        { error: `severity must be one of: ${VALID_SEVERITIES.join(', ')}` },
-        { status: 400 }
-      );
-    }
-
-    const incident = await createIncident({
-      serviceId: parseInt(serviceId, 10),
-      title: title.trim(),
-      message: message.trim(),
-      severity,
-    });
-
+  return handleAdminApi('Failed to create incident', async () => {
+    const body = await readJsonObject(request);
+    const incident = await createIncident(parseCreateIncident(body));
     return NextResponse.json(incident, { status: 201 });
-  } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+  });
+}
+
+function parseLimit(value: string | null): number | undefined {
+  if (value === null) {
+    return undefined;
   }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
+    throw new ApiError('limit must be an integer between 1 and 100', 400);
+  }
+  return parsed;
 }

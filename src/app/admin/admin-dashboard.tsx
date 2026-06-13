@@ -3,6 +3,7 @@
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   Service, Incident, ServiceStatus, IncidentStatus,
   STATUS_LABELS,
@@ -273,7 +274,14 @@ export default function AdminDashboard({
         <header className="header fade-in">
           <div className="admin-header">
             <div className="header-logo-row">
-              <img src="/icon.png" alt="Statoo Logo" className="header-logo" />
+              <Image
+                src="/icon.png"
+                alt="Statoo Logo"
+                className="header-logo"
+                width={48}
+                height={48}
+                priority
+              />
               <div>
                 <h1 className="service-name">Admin Dashboard</h1>
                 <p className="service-description">Manage services and incidents</p>

@@ -1,18 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
+import { handleApi, readJsonObject } from '@/lib/api';
 import { saveSubscription } from '@/lib/push';
+import { parsePushSubscription } from '@/lib/validation';
 
-export async function POST(req: NextRequest) {
-  try {
-    const { endpoint, keys } = await req.json();
-
-    if (!endpoint || !keys || !keys.p256dh || !keys.auth) {
-      return NextResponse.json({ error: 'Missing endpoint or keys' }, { status: 400 });
-    }
-
+export async function POST(request: Request) {
+  return handleApi('Failed to save push subscription', async () => {
+    const body = await readJsonObject(request);
+    const { endpoint, keys } = parsePushSubscription(body);
     await saveSubscription(endpoint, keys);
     return NextResponse.json({ success: true });
-  } catch (err: any) {
-    console.error('Error saving subscription:', err);
-    return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
-  }
+  });
 }

@@ -1,59 +1,67 @@
 # Statoo
 
-A minimal, beautiful status page for your services. Deploy one instance per service on Vercel.
-
-```
-Service A → deploy statoo → status-a.vercel.app
-Service B → deploy statoo → status-b.vercel.app
-```
+A self-hosted status page for monitoring multiple services, publishing incidents,
+tracking uptime, and sending web push outage alerts.
 
 ## Quick Start
+
+1. Copy `.env.example` to `.env.local` and configure PostgreSQL and the admin
+   password.
+2. Install dependencies and start the development server:
 
 ```bash
 npm install
 npm run dev
 ```
 
+Open `/admin` to add services and incidents. The public status page is available
+at `/`.
+
 ## Configuration
 
-Set these environment variables (in Vercel dashboard or `.env.local`):
+| Variable | Required | Description |
+| --- | --- | --- |
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `DATABASE_SSL` | No | Set to `false` for a local database; cloud databases use SSL by default |
+| `ADMIN_PASSWORD` | Yes | Password for the admin dashboard |
+| `PAGE_TITLE` | No | Public status page title |
+| `PAGE_DESCRIPTION` | No | Public status page description |
+| `VAPID_PUBLIC_KEY` | For push | Server-side VAPID public key |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | For push | Browser-visible copy of the same public key |
+| `VAPID_PRIVATE_KEY` | For push | VAPID private key |
+| `VAPID_SUBJECT` | For push | `mailto:` or `https://` contact URI |
 
-| Variable | Required | Description | Example |
-|----------|----------|-------------|---------|
-| `SERVICE_NAME` | No | Display name | `Bangkok API` |
-| `SERVICE_DESCRIPTION` | No | Short description | `Translation service` |
-| `SERVICE_URL` | No | Health check endpoint | `https://api.example.com/health` |
+Generate VAPID keys with:
 
-## Deploy to Vercel
+```bash
+node -e "const webpush=require('web-push'); console.log(webpush.generateVAPIDKeys())"
+```
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/YOUR_USER/statoo)
+## Commands
 
-1. Push this repo to GitHub
-2. Import it in Vercel
-3. Set environment variables
-4. Deploy
-
-Each deployment is fully independent — deploy multiple instances for multiple services.
+```bash
+npm run dev
+npm run lint
+npm run build
+npm start
+```
 
 ## API
 
-`GET /api/status` — returns current status as JSON:
+Public endpoints:
 
-```json
-{
-  "service": "Bangkok API",
-  "description": "Translation service",
-  "status": "operational",
-  "responseTime": 142,
-  "statusCode": 200,
-  "checkedAt": "2025-01-01T00:00:00.000Z",
-  "url": "https://api.example.com/health"
-}
-```
+- `GET /api/status`
+- `GET /api/services`
+- `GET /api/incidents`
+- `POST /api/push/subscribe`
+- `POST /api/push/unsubscribe`
 
-## Roadmap
+Admin mutations require an authenticated admin session:
 
-- [ ] Incident management with PostgreSQL
-- [ ] Admin panel
-- [ ] Email/webhook notifications
-- [ ] Multiple endpoint monitoring
+- `POST /api/services`
+- `PATCH|DELETE /api/services/:id`
+- `POST /api/services/check`
+- `POST /api/incidents`
+- `PATCH|DELETE /api/incidents/:id`
+- `POST /api/push/test`
+- `POST /api/push/clear`

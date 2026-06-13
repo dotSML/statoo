@@ -76,6 +76,12 @@ export async function ensureMigrated(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_incidents_active
       ON incidents (status, created_at DESC)
       WHERE status != 'resolved';
+
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      endpoint   TEXT PRIMARY KEY,
+      keys       JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   `);
 
   migrated = true;

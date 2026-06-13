@@ -1,5 +1,10 @@
 import { cookies } from 'next/headers';
-import { createHmac, randomBytes } from 'crypto';
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from 'crypto';
 
 const COOKIE_NAME = 'statoo_session';
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
@@ -39,7 +44,7 @@ export function verifySessionToken(token: string): boolean {
     .update(payload)
     .digest('hex');
 
-  if (signature !== expected) return false;
+  if (!safeEqual(signature, expected)) return false;
 
   // Check expiry
   const created = parseInt(timestamp, 10);
@@ -53,7 +58,9 @@ export function verifySessionToken(token: string): boolean {
  * Verify admin password.
  */
 export function verifyPassword(password: string): boolean {
-  return password === getSecret();
+  const supplied = createHash('sha256').update(password).digest();
+  const expected = createHash('sha256').update(getSecret()).digest();
+  return timingSafeEqual(supplied, expected);
 }
 
 /**
@@ -93,12 +100,9 @@ export async function destroySession(): Promise<void> {
   cookieStore.delete(COOKIE_NAME);
 }
 
-/**
- * Guard helper — throws if not authenticated. Use in API routes.
- */
-export async function requireAuth(): Promise<void> {
-  const valid = await validateSession();
-  if (!valid) {
-    throw new Error('Unauthorized');
-  }
+function safeEqual(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  return leftBuffer.length === rightBuffer.length
+    && timingSafeEqual(leftBuffer, rightBuffer);
 }

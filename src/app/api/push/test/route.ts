@@ -1,15 +1,9 @@
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import { handleAdminApi } from '@/lib/api';
 import { sendTestNotification } from '@/lib/push';
 
 export async function POST() {
-  try {
-    await requireAuth();
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  try {
+  return handleAdminApi('Failed to send test notification', async () => {
     const result = await sendTestNotification();
 
     if (result.total === 0) {
@@ -20,7 +14,5 @@ export async function POST() {
     }
 
     return NextResponse.json(result);
-  } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
-  }
+  });
 }

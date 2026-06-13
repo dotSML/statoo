@@ -1,52 +1,44 @@
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import {
+  handleAdminApi,
+  parsePositiveInteger,
+  readJsonObject,
+} from '@/lib/api';
 import { updateIncident, deleteIncident } from '@/lib/repository';
+import { parseUpdateIncident } from '@/lib/validation';
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    await requireAuth();
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  try {
+  return handleAdminApi('Failed to update incident', async () => {
     const { id } = await params;
-    const body = await request.json();
-    const incident = await updateIncident(parseInt(id, 10), body);
+    const body = await readJsonObject(request);
+    const incident = await updateIncident(
+      parsePositiveInteger(id, 'id'),
+      parseUpdateIncident(body)
+    );
 
     if (!incident) {
       return NextResponse.json({ error: 'Incident not found' }, { status: 404 });
     }
 
     return NextResponse.json(incident);
-  } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
-  }
+  });
 }
 
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    await requireAuth();
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  try {
+  return handleAdminApi('Failed to delete incident', async () => {
     const { id } = await params;
-    const deleted = await deleteIncident(parseInt(id, 10));
+    const deleted = await deleteIncident(parsePositiveInteger(id, 'id'));
 
     if (!deleted) {
       return NextResponse.json({ error: 'Incident not found' }, { status: 404 });
     }
 
     return NextResponse.json({ ok: true });
-  } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
-  }
+  });
 }

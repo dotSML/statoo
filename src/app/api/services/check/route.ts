@@ -1,23 +1,12 @@
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import { handleAdminApi } from '@/lib/api';
 import { runAllHealthChecks } from '@/lib/repository';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST() {
-  try {
-    await requireAuth();
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  try {
+  return handleAdminApi('Failed to run health checks', async () => {
     await runAllHealthChecks();
     return NextResponse.json({ ok: true });
-  } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to run health checks', detail: String(error) },
-      { status: 500 }
-    );
-  }
+  });
 }

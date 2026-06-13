@@ -3,6 +3,7 @@
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function AdminLogin() {
   const [password, setPassword] = useState('');
@@ -40,7 +41,14 @@ export default function AdminLogin() {
         <div className="login-container fade-in">
           <div className="login-card">
             <div className="login-logo-container">
-              <img src="/icon.png" alt="Statoo Logo" className="login-logo" />
+              <Image
+                src="/icon.png"
+                alt="Statoo Logo"
+                className="login-logo"
+                width={96}
+                height={96}
+                priority
+              />
             </div>
             <h1 className="login-title">Admin Login</h1>
             <p className="login-subtitle">Enter your admin password to continue</p>

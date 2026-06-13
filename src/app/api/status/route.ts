@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
+import { handleApi } from '@/lib/api';
 import { getServicesWithStats, deriveOverallStatus, getIncidents, ensureHealthChecksUpdated } from '@/lib/repository';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  try {
+  return handleApi('Failed to fetch status', async () => {
     await ensureHealthChecksUpdated();
     const services = await getServicesWithStats();
     const activeIncidents = await getIncidents({ activeOnly: true });
@@ -16,10 +17,5 @@ export async function GET() {
       activeIncidents,
       checkedAt: new Date().toISOString(),
     });
-  } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to fetch status', detail: String(error) },
-      { status: 500 }
-    );
-  }
+  });
 }

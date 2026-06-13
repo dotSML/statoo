@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   Service, ServiceStatus, Incident,
   STATUS_LABELS, INCIDENT_STATUS_LABELS,
@@ -14,6 +15,12 @@ interface StatusPageClientProps {
   activeIncidents: Incident[];
   recentIncidents: Incident[];
   overallStatus: ServiceStatus;
+}
+
+interface BrowserCapabilities {
+  isStandalone: boolean;
+  isIOS: boolean;
+  swSupported: boolean;
 }
 
 export default function StatusPageClient({
@@ -31,34 +38,46 @@ export default function StatusPageClient({
   const [lastChecked, setLastChecked] = useState(new Date().toISOString());
 
   // PWA & Notification States
-  const [isStandalone, setIsStandalone] = useState(false);
-  const [isIOS, setIsIOS] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [subLoading, setSubLoading] = useState(false);
-  const [notificationPermission, setNotificationPermission] = useState<string | null>(null);
-  const [swSupported, setSwSupported] = useState(false);
+  const [capabilities, setCapabilities] = useState<BrowserCapabilities>({
+    isStandalone: false,
+    isIOS: false,
+    swSupported: false,
+  });
+  const { isStandalone, isIOS, swSupported } = capabilities;
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const standalone = (window.navigator as any).standalone || window.matchMedia('(display-mode: standalone)').matches;
-      setIsStandalone(!!standalone);
-
-      const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-      setIsIOS(ios);
-
+    let cancelled = false;
+    const frame = window.requestAnimationFrame(() => {
+      const standaloneNavigator = navigator as Navigator & {
+        standalone?: boolean;
+      };
       const supported = 'serviceWorker' in navigator && 'PushManager' in window;
-      setSwSupported(supported);
+      setCapabilities({
+        isStandalone:
+          standaloneNavigator.standalone === true
+          || window.matchMedia('(display-mode: standalone)').matches,
+        isIOS: /iPad|iPhone|iPod/.test(navigator.userAgent),
+        swSupported: supported,
+      });
 
       if (supported) {
-        setNotificationPermission(Notification.permission);
         navigator.serviceWorker.register('/sw.js', { scope: '/' })
           .then(async (registration) => {
             const subscription = await registration.pushManager.getSubscription();
-            setIsSubscribed(!!subscription);
+            if (!cancelled) {
+              setIsSubscribed(Boolean(subscription));
+            }
           })
           .catch((err) => console.error('Service Worker registration failed:', err));
       }
-    }
+    });
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+    };
   }, []);
 
   const handleSubscribe = async () => {
@@ -66,7 +85,6 @@ export default function StatusPageClient({
     setSubLoading(true);
     try {
       const permission = await Notification.requestPermission();
-      setNotificationPermission(permission);
       if (permission !== 'granted') {
         alert('Notification permission was denied. Please enable notifications in your browser settings.');
         return;
@@ -154,7 +172,14 @@ export default function StatusPageClient({
         <header className="header fade-in">
           <div className="header-content">
             <div className="header-logo-row">
-              <img src="/icon.png" alt="Statoo Logo" className="header-logo" />
+              <Image
+                src="/icon.png"
+                alt="Statoo Logo"
+                className="header-logo"
+                width={48}
+                height={48}
+                priority
+              />
               <div>
                 <h1 className="service-name">{pageTitle}</h1>
                 <p className="service-description">{pageDescription}</p>

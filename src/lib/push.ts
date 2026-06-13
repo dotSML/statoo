@@ -91,7 +91,6 @@ export async function deleteSubscription(endpoint: string): Promise<void> {
 export async function deleteAllSubscriptions(): Promise<PushDeleteStats> {
   await ensureMigrated();
   const db = getPool();
-  await ensurePushTable();
   const result = await db.query('DELETE FROM push_subscriptions');
   return { deleted: result.rowCount ?? 0 };
 }
@@ -137,7 +136,6 @@ export async function sendTestNotification(): Promise<PushSendStats> {
 async function sendPushToAll(payload: PushPayload): Promise<PushSendStats> {
   await ensureMigrated();
   const db = getPool();
-  await ensurePushTable();
 
   const { rows } = await db.query('SELECT endpoint, keys FROM push_subscriptions');
   if (rows.length === 0) {
@@ -195,17 +193,6 @@ async function sendPushToAll(payload: PushPayload): Promise<PushSendStats> {
 
   await Promise.allSettled(notificationPromises);
   return { total: rows.length, sent, failed };
-}
-
-async function ensurePushTable(): Promise<void> {
-  const db = getPool();
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS push_subscriptions (
-      endpoint TEXT PRIMARY KEY,
-      keys JSONB NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
 }
 
 function isValidVapidSubject(subject: string): boolean {

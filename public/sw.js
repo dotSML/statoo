@@ -14,7 +14,7 @@ self.addEventListener('push', function (event) {
       event.waitUntil(
         self.registration.showNotification(data.title, options)
       );
-    } catch (e) {
+    } catch {
       const options = {
         body: event.data.text(),
         icon: '/icon-192x192.png',
