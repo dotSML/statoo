@@ -1,5 +1,5 @@
 import { ApiError, parsePositiveInteger } from './api';
-import type { IncidentStatus, ServiceStatus } from './types';
+import type { IncidentStatus, ServiceCheckType, ServiceStatus } from './types';
 import type {
   CreateIncidentInput,
   UpdateIncidentInput,
@@ -18,6 +18,7 @@ const SERVICE_STATUSES: ServiceStatus[] = [
   'maintenance',
   'unknown',
 ];
+const SERVICE_CHECK_TYPES: ServiceCheckType[] = ['http', 'jellyfin'];
 const INCIDENT_SEVERITIES: ServiceStatus[] = [
   'degraded',
   'partial_outage',
@@ -34,12 +35,45 @@ const INCIDENT_STATUSES: IncidentStatus[] = [
 export function parseCreateService(
   body: Record<string, unknown>
 ): CreateServiceInput {
-  return {
+  const checkType = serviceCheckType(body.checkType, 'http');
+  const url = nullableString(body.url, 'url');
+  const result: CreateServiceInput = {
     name: requiredString(body.name, 'name'),
     description: nullableString(body.description, 'description'),
-    url: nullableString(body.url, 'url'),
+    url,
+    checkType,
     expectedStatusCode: httpStatusCode(body.expectedStatusCode, 200),
     status: serviceStatus(body.status, 'operational'),
+  };
+
+  if (checkType === 'jellyfin') {
+    if (!url) {
+      throw new ApiError('url is required for Jellyfin checks', 400);
+    }
+
+    result.jellyfinUsername = requiredString(
+      body.jellyfinUsername,
+      'jellyfinUsername'
+    );
+    result.jellyfinPassword = requiredString(
+      body.jellyfinPassword,
+      'jellyfinPassword'
+    );
+    result.jellyfinMediaUrl = requiredString(
+      body.jellyfinMediaUrl,
+      'jellyfinMediaUrl'
+    );
+  }
+
+  return {
+    ...result,
+    ...(checkType === 'http'
+      ? {
+          jellyfinUsername: null,
+          jellyfinPassword: null,
+          jellyfinMediaUrl: null,
+        }
+      : {}),
   };
 }
 
@@ -53,12 +87,33 @@ export function parseUpdateService(
     result.description = nullableString(body.description, 'description');
   }
   if ('url' in body) result.url = nullableString(body.url, 'url');
+  if ('checkType' in body) {
+    result.checkType = serviceCheckType(body.checkType);
+  }
   if ('status' in body) result.status = serviceStatus(body.status);
   if ('sortOrder' in body) {
     result.sortOrder = integer(body.sortOrder, 'sortOrder');
   }
   if ('expectedStatusCode' in body) {
     result.expectedStatusCode = httpStatusCode(body.expectedStatusCode, 200);
+  }
+  if ('jellyfinUsername' in body) {
+    result.jellyfinUsername = nullableString(
+      body.jellyfinUsername,
+      'jellyfinUsername'
+    );
+  }
+  if ('jellyfinPassword' in body) {
+    result.jellyfinPassword = nullableString(
+      body.jellyfinPassword,
+      'jellyfinPassword'
+    );
+  }
+  if ('jellyfinMediaUrl' in body) {
+    result.jellyfinMediaUrl = nullableString(
+      body.jellyfinMediaUrl,
+      'jellyfinMediaUrl'
+    );
   }
 
   requireUpdateFields(result);
@@ -192,6 +247,16 @@ function serviceStatus(
     return fallback;
   }
   return enumValue(value, 'status', SERVICE_STATUSES);
+}
+
+function serviceCheckType(
+  value: unknown,
+  fallback?: ServiceCheckType
+): ServiceCheckType {
+  if (value === undefined && fallback) {
+    return fallback;
+  }
+  return enumValue(value, 'checkType', SERVICE_CHECK_TYPES);
 }
 
 function incidentSeverity(value: unknown): ServiceStatus {

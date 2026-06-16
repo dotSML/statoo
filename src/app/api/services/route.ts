@@ -1,13 +1,16 @@
 import { NextResponse } from 'next/server';
 import { handleAdminApi, handleApi, readJsonObject } from '@/lib/api';
-import { getServices, createService } from '@/lib/repository';
+import { validateSession } from '@/lib/auth';
+import { getAdminServices, getServices, createService } from '@/lib/repository';
 import { parseCreateService } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   return handleApi('Failed to fetch services', async () => {
-    const services = await getServices();
+    const services = await validateSession()
+      ? await getAdminServices()
+      : await getServices();
     return NextResponse.json(services);
   });
 }

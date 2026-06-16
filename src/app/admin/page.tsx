@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { validateSession } from '@/lib/auth';
 import { checkDatabaseStatus } from '@/lib/db';
-import { getCachedServices, getServices, getIncidents } from '@/lib/repository';
+import { getAdminServices, getCachedServices, getIncidents } from '@/lib/repository';
 import type { DatabaseStatus, Incident, Service } from '@/lib/types';
 import AdminDashboard from './admin-dashboard';
 
@@ -20,7 +20,7 @@ export default async function AdminPage() {
   if (databaseStatus.ok) {
     try {
       [services, incidents] = await Promise.all([
-        getServices(),
+        getAdminServices(),
         getIncidents({ limit: 20 }),
       ]);
     } catch (error) {

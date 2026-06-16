@@ -72,6 +72,10 @@ export async function ensureMigrated(): Promise<void> {
     );
 
     ALTER TABLE services ADD COLUMN IF NOT EXISTS expected_status_code INTEGER NOT NULL DEFAULT 200;
+    ALTER TABLE services ADD COLUMN IF NOT EXISTS check_type VARCHAR(20) NOT NULL DEFAULT 'http';
+    ALTER TABLE services ADD COLUMN IF NOT EXISTS jellyfin_username TEXT;
+    ALTER TABLE services ADD COLUMN IF NOT EXISTS jellyfin_password TEXT;
+    ALTER TABLE services ADD COLUMN IF NOT EXISTS jellyfin_media_url TEXT;
 
     CREATE TABLE IF NOT EXISTS health_checks (
       id            SERIAL PRIMARY KEY,

@@ -1,3 +1,5 @@
+export type ServiceCheckType = 'http' | 'jellyfin';
+
 export type ServiceStatus =
   | 'operational'
   | 'degraded'
@@ -17,10 +19,14 @@ export interface Service {
   name: string;
   description: string | null;
   url: string | null;
+  checkType: ServiceCheckType;
   status: ServiceStatus;
   sortOrder: number;
   createdAt: string;
   expectedStatusCode: number;
+  jellyfinUsername?: string | null;
+  jellyfinMediaUrl?: string | null;
+  hasJellyfinPassword?: boolean;
   avgLatency?: number | null;
   uptimePercentage?: number | null;
   uptimeDays?: UptimeDay[];

@@ -38,6 +38,17 @@ Generate VAPID keys with:
 node -e "const webpush=require('web-push'); console.log(webpush.generateVAPIDKeys())"
 ```
 
+### Jellyfin playback probing
+
+When adding a service in the admin dashboard, choose `Jellyfin Playback` as the
+check type. Provide the Jellyfin base URL, monitor username, monitor password,
+and a known-good media URL or item id. Statoo authenticates with Jellyfin, checks
+playback info, and reads a small byte range from the media endpoint so the check
+proves that files can actually be opened and streamed.
+
+Jellyfin passwords are stored server-side and are never returned by the public
+status APIs.
+
 ## Commands
 
 ```bash

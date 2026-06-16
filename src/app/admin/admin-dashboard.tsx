@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
-  Service, Incident, ServiceStatus, IncidentStatus, DatabaseStatus,
+  Service, Incident, ServiceCheckType, ServiceStatus, IncidentStatus, DatabaseStatus,
   STATUS_LABELS,
 } from '@/lib/types';
 
@@ -212,8 +212,12 @@ export default function AdminDashboard({
   const [svcName, setSvcName] = useState('');
   const [svcDesc, setSvcDesc] = useState('');
   const [svcUrl, setSvcUrl] = useState('');
+  const [svcCheckType, setSvcCheckType] = useState<ServiceCheckType>('http');
   const [svcExpected, setSvcExpected] = useState('200');
   const [svcStatus, setSvcStatus] = useState<ServiceStatus>('operational');
+  const [svcJellyfinUsername, setSvcJellyfinUsername] = useState('');
+  const [svcJellyfinPassword, setSvcJellyfinPassword] = useState('');
+  const [svcJellyfinMediaUrl, setSvcJellyfinMediaUrl] = useState('');
   const [svcLoading, setSvcLoading] = useState(false);
 
   // Incident form
@@ -233,13 +237,29 @@ export default function AdminDashboard({
     e.preventDefault();
     if (blockIfDatabaseDown('save services')) return;
     setSvcLoading(true);
-    const payload = {
+    const payload: Record<string, unknown> = {
       name: svcName,
       description: svcDesc || null,
       url: svcUrl || null,
+      checkType: svcCheckType,
       expectedStatusCode: parseInt(svcExpected, 10) || 200,
       status: svcStatus,
     };
+
+    if (svcCheckType === 'jellyfin') {
+      payload.expectedStatusCode = 200;
+      payload.jellyfinUsername = svcJellyfinUsername;
+      payload.jellyfinMediaUrl = svcJellyfinMediaUrl;
+
+      if (svcJellyfinPassword || !editingService?.hasJellyfinPassword) {
+        payload.jellyfinPassword = svcJellyfinPassword;
+      }
+    } else {
+      payload.jellyfinUsername = null;
+      payload.jellyfinPassword = null;
+      payload.jellyfinMediaUrl = null;
+    }
+
     try {
       if (editingService) {
         const res = await fetch(`/api/services/${editingService.id}`, {
@@ -282,8 +302,12 @@ export default function AdminDashboard({
     setSvcName('');
     setSvcDesc('');
     setSvcUrl('');
+    setSvcCheckType('http');
     setSvcExpected('200');
     setSvcStatus('operational');
+    setSvcJellyfinUsername('');
+    setSvcJellyfinPassword('');
+    setSvcJellyfinMediaUrl('');
     setEditingService(null);
     setShowServiceForm(false);
   }
@@ -499,18 +523,33 @@ export default function AdminDashboard({
                   />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="svc-url" className="form-label">Health Check URL</label>
+                  <label htmlFor="svc-check-type" className="form-label">Check Type</label>
+                  <select
+                    id="svc-check-type"
+                    value={svcCheckType}
+                    onChange={e => setSvcCheckType(e.target.value as ServiceCheckType)}
+                    className="form-input form-select"
+                  >
+                    <option value="http">HTTP Status</option>
+                    <option value="jellyfin">Jellyfin Playback</option>
+                  </select>
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="svc-url" className="form-label">
+                    {svcCheckType === 'jellyfin' ? 'Jellyfin URL *' : 'Health Check URL'}
+                  </label>
                   <input
                     id="svc-url"
                     type="url"
                     value={svcUrl}
                     onChange={e => setSvcUrl(e.target.value)}
                     className="form-input"
-                    placeholder="https://api.example.com/health"
+                    placeholder={svcCheckType === 'jellyfin' ? 'https://jellyfin.example.com' : 'https://api.example.com/health'}
+                    required={svcCheckType === 'jellyfin'}
                   />
                 </div>
-              </div>
-              <div className="form-row" style={{ gridTemplateColumns: '1fr' }}>
                 <div className="form-group">
                   <label htmlFor="svc-desc" className="form-label">Description</label>
                   <input
@@ -523,20 +562,80 @@ export default function AdminDashboard({
                   />
                 </div>
               </div>
+              {svcCheckType === 'jellyfin' && (
+                <>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="svc-jellyfin-username" className="form-label">Jellyfin User *</label>
+                      <input
+                        id="svc-jellyfin-username"
+                        type="text"
+                        value={svcJellyfinUsername}
+                        onChange={e => setSvcJellyfinUsername(e.target.value)}
+                        className="form-input"
+                        placeholder="Monitor"
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="svc-jellyfin-password" className="form-label">
+                        Jellyfin Password {!editingService?.hasJellyfinPassword && '*'}
+                      </label>
+                      <input
+                        id="svc-jellyfin-password"
+                        type="password"
+                        value={svcJellyfinPassword}
+                        onChange={e => setSvcJellyfinPassword(e.target.value)}
+                        className="form-input"
+                        placeholder={editingService?.hasJellyfinPassword ? 'Leave blank to keep current password' : 'Password'}
+                        required={!editingService?.hasJellyfinPassword}
+                      />
+                    </div>
+                  </div>
+                  <div className="form-row" style={{ gridTemplateColumns: '1fr' }}>
+                    <div className="form-group">
+                      <label htmlFor="svc-jellyfin-media" className="form-label">Media URL or Item ID *</label>
+                      <input
+                        id="svc-jellyfin-media"
+                        type="text"
+                        value={svcJellyfinMediaUrl}
+                        onChange={e => setSvcJellyfinMediaUrl(e.target.value)}
+                        className="form-input"
+                        placeholder="https://jellyfin.example.com/Items/item-id/Download"
+                        required
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
               <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="svc-expected" className="form-label">Expected Status Code</label>
-                  <input
-                    id="svc-expected"
-                    type="number"
-                    value={svcExpected}
-                    onChange={e => setSvcExpected(e.target.value)}
-                    className="form-input"
-                    placeholder="200"
-                    min="100"
-                    max="599"
-                  />
-                </div>
+                {svcCheckType === 'http' && (
+                  <div className="form-group">
+                    <label htmlFor="svc-expected" className="form-label">Expected Status Code</label>
+                    <input
+                      id="svc-expected"
+                      type="number"
+                      value={svcExpected}
+                      onChange={e => setSvcExpected(e.target.value)}
+                      className="form-input"
+                      placeholder="200"
+                      min="100"
+                      max="599"
+                    />
+                  </div>
+                )}
+                {svcCheckType === 'jellyfin' && (
+                  <div className="form-group">
+                    <label htmlFor="svc-expected-disabled" className="form-label">Expected Result</label>
+                    <input
+                      id="svc-expected-disabled"
+                      type="text"
+                      value="Playable media bytes"
+                      className="form-input"
+                      disabled
+                    />
+                  </div>
+                )}
                 <div className="form-group">
                   <label htmlFor="svc-status" className="form-label">
                     Status {svcUrl && <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>(Note: health check will overwrite)</span>}
@@ -590,7 +689,12 @@ export default function AdminDashboard({
                           fontWeight: 'normal',
                         }}>
                           ({service.url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}
-                          {service.expectedStatusCode && service.expectedStatusCode !== 200 ? ` → ${service.expectedStatusCode}` : ''})
+                          {service.checkType === 'jellyfin'
+                            ? ' · Jellyfin'
+                            : service.expectedStatusCode && service.expectedStatusCode !== 200
+                              ? ` → ${service.expectedStatusCode}`
+                              : ''}
+                          )
                         </span>
                       )}
                     </span>
@@ -610,8 +714,12 @@ export default function AdminDashboard({
                       setSvcName(service.name);
                       setSvcDesc(service.description || '');
                       setSvcUrl(service.url || '');
+                      setSvcCheckType(service.checkType || 'http');
                       setSvcExpected((service.expectedStatusCode || 200).toString());
                       setSvcStatus(service.status);
+                      setSvcJellyfinUsername(service.jellyfinUsername || '');
+                      setSvcJellyfinPassword('');
+                      setSvcJellyfinMediaUrl(service.jellyfinMediaUrl || '');
                       setShowServiceForm(true);
                     }}
                     disabled={!databaseAvailable}

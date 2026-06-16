@@ -1,4 +1,6 @@
 import { HealthCheckResult, ServiceStatus } from './types';
+import { checkJellyfinPlayback } from './jellyfin';
+import type { ServiceForHealthCheck } from './repository/services';
 
 export async function checkHealth(url: string | null, expectedStatusCode: number = 200): Promise<HealthCheckResult> {
   if (!url) {
@@ -60,4 +62,19 @@ function deriveStatus(statusCode: number, responseTime: number, expectedStatusCo
 
   if (statusCode >= 500) return 'major_outage';
   return 'partial_outage';
+}
+
+export async function checkServiceHealth(
+  service: ServiceForHealthCheck
+): Promise<HealthCheckResult> {
+  if (service.checkType === 'jellyfin') {
+    const result = await checkJellyfinPlayback(service);
+    return {
+      ...result,
+      checkedAt: new Date().toISOString(),
+      url: service.url,
+    };
+  }
+
+  return checkHealth(service.url, service.expectedStatusCode);
 }

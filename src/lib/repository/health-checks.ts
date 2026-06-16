@@ -1,5 +1,5 @@
 import { ensureMigrated, getPool } from '../db';
-import { checkHealth } from '../health';
+import { checkServiceHealth } from '../health';
 import type {
   HealthCheckResult,
   Incident,
@@ -9,7 +9,14 @@ import type {
 } from '../types';
 import { STATUS_SEVERITY } from '../types';
 import { getIncidents } from './incidents';
-import { getCachedServices, getServices, updateService } from './services';
+import {
+  getCachedServices,
+  getCachedServicesForHealthChecks,
+  getServices,
+  getServicesForHealthChecks as loadServicesForHealthChecks,
+  updateService,
+} from './services';
+import type { ServiceForHealthCheck } from './services';
 
 const UPTIME_DAYS = 90;
 const HEALTH_CHECK_STALE_MS = 60_000;
@@ -86,7 +93,7 @@ export async function getLastHealthCheckTime(): Promise<Date | null> {
 }
 
 export async function runAllHealthChecks(): Promise<void> {
-  const services = await getServicesForHealthChecks();
+  const services = await getHealthCheckServices();
   const activeIncidents = await getActiveIncidentsForHealthChecks();
 
   const incidentsByService = new Map<number, ServiceStatus[]>();
@@ -103,10 +110,7 @@ export async function runAllHealthChecks(): Promise<void> {
       }
 
       try {
-        const result = await checkHealth(
-          service.url,
-          service.expectedStatusCode
-        );
+        const result = await checkServiceHealth(service);
         await saveHealthCheck(service.id, result);
 
         const nextStatus = findWorstStatus([
@@ -229,11 +233,11 @@ export async function getServicesWithStats(): Promise<Service[]> {
   });
 }
 
-async function getServicesForHealthChecks(): Promise<Service[]> {
+async function getHealthCheckServices(): Promise<ServiceForHealthCheck[]> {
   try {
-    return await getServices();
+    return await loadServicesForHealthChecks();
   } catch (error) {
-    const cachedServices = getCachedServices();
+    const cachedServices = getCachedServicesForHealthChecks();
     if (cachedServices.length === 0) {
       throw error;
     }
