@@ -515,6 +515,7 @@ a {
   border: 1px solid var(--border-subtle);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
 }
 
 .check-card:hover {
@@ -1087,19 +1088,40 @@ a {
 /* ── Admin ───────────────────────────────────── */
 
 .admin-container {
-  max-width: 820px;
+  max-width: 960px;
   padding-bottom: 48px;
 }
 
 .admin-header {
   display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.admin-header-main {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: flex-start;
+  gap: 20px;
+}
+
+.admin-system-status {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .admin-header-actions {
   display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.admin-header-actions .btn,
+.admin-header-actions a {
+  min-height: 38px;
+  padding-inline: 12px;
 }
 
 .admin-header-feedback {
@@ -1113,6 +1135,42 @@ a {
 
 .admin-header-feedback--error {
   color: var(--status-major);
+}
+
+.admin-db-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.admin-db-pill[data-status="operational"] {
+  color: var(--status-operational);
+  border-color: rgba(34, 197, 94, 0.24);
+  background: var(--status-operational-bg);
+}
+
+.admin-db-pill[data-status="major_outage"] {
+  color: var(--status-major);
+  border-color: rgba(239, 68, 68, 0.28);
+  background: var(--status-major-bg);
+}
+
+.admin-db-pill-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 10px currentColor;
+  flex-shrink: 0;
 }
 
 .admin-db-alert {
@@ -1230,6 +1288,7 @@ a {
   align-items: center;
   gap: 12px;
   min-width: 0;
+  flex: 1;
 }
 
 .admin-list-info {
@@ -1261,6 +1320,8 @@ a {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  justify-content: flex-end;
+  min-width: 0;
 }
 
 .admin-empty {
@@ -1383,6 +1444,8 @@ a {
   .check-left {
     align-items: flex-start;
     gap: 12px;
+    width: 100%;
+    min-width: 0;
   }
 
   .check-name-row {
@@ -1396,18 +1459,26 @@ a {
   }
 
   .check-right {
+    flex-wrap: wrap;
     width: 100%;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
     margin-top: 4px;
     border-top: 1px solid var(--border-subtle);
     padding-top: 12px;
+    gap: 8px;
   }
 
   .check-status-label {
-    white-space: nowrap;
+    white-space: normal;
     font-size: 12px;
     padding: 3px 8px;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .check-response-time {
+    margin-right: 0;
   }
 
   .check-response-time {
@@ -1456,9 +1527,23 @@ a {
 
   /* Admin Header */
   .admin-header {
-    flex-direction: column;
-    gap: 16px;
     width: 100%;
+  }
+
+  .admin-header-main {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    width: 100%;
+  }
+
+  .admin-system-status,
+  .admin-db-pill {
+    width: 100%;
+  }
+
+  .admin-db-pill {
+    justify-content: center;
   }
 
   .admin-header-actions {
@@ -1495,10 +1580,21 @@ a {
 
   .admin-list-actions {
     width: 100%;
-    justify-content: space-between;
+    justify-content: flex-start;
+    flex-wrap: wrap;
     border-top: 1px solid var(--border-subtle);
     padding-top: 10px;
     margin-top: 4px;
+  }
+
+  .admin-list-actions .check-status-label,
+  .admin-list-actions .incident-status-badge {
+    margin-right: auto;
+  }
+
+  .admin-list-actions .form-select-sm {
+    flex: 1;
+    min-width: 160px;
   }
 
   .admin-list-url-badge {
@@ -1640,4 +1736,22 @@ a {
   height: 14px;
   stroke-width: 2.5;
   color: var(--text-secondary);
+}
+
+@media (max-width: 600px) {
+  .pwa-banner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .pwa-banner-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .pwa-banner-btn {
+    flex: 1;
+  }
 }

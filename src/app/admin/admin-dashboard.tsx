@@ -375,22 +375,31 @@ export default function AdminDashboard({
         {/* Admin Header */}
         <header className="header fade-in">
           <div className="admin-header">
-            <div className="header-logo-row">
-              <Image
-                src="/icon.png"
-                alt="Statoo Logo"
-                className="header-logo"
-                width={48}
-                height={48}
-                priority
-              />
-              <div>
-                <h1 className="service-name">Admin Dashboard</h1>
-                <p className="service-description">Manage services and incidents</p>
+            <div className="admin-header-main">
+              <div className="header-logo-row">
+                <Image
+                  src="/icon.png"
+                  alt="Statoo Logo"
+                  className="header-logo"
+                  width={48}
+                  height={48}
+                  priority
+                />
+                <div>
+                  <h1 className="service-name">Admin Dashboard</h1>
+                  <p className="service-description">Manage services and incidents</p>
+                </div>
               </div>
-            </div>
-            <div className="mobile-route-switch">
-              <Link href="/" className="btn btn-ghost btn-sm btn-full">Back to Status Page</Link>
+              <div className="admin-system-status">
+                <span
+                  className="admin-db-pill"
+                  data-status={databaseAvailable ? 'operational' : 'major_outage'}
+                  title={`PostgreSQL checked ${formatClockTime(databaseStatus.checkedAt)}`}
+                >
+                  <span className="admin-db-pill-dot" />
+                  <span>{databaseAvailable ? 'Postgres OK' : 'Postgres Down'}</span>
+                </span>
+              </div>
             </div>
             <div className="admin-header-actions">
               <button
