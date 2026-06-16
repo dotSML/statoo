@@ -158,12 +158,36 @@ export async function ensureHealthChecksUpdated(): Promise<void> {
     !lastCheck || Date.now() - lastCheck.getTime() > HEALTH_CHECK_STALE_MS;
 
   if (isStale) {
-    await runAllHealthChecks();
+    try {
+      await runAllHealthChecks();
+    } catch (error) {
+      console.warn('Unable to update health checks right now.', error);
+    }
   }
 }
 
 export async function getServicesWithStats(): Promise<Service[]> {
-  const services = await getServices();
+  let services: Service[];
+
+  try {
+    services = await getServices();
+  } catch (error) {
+    const cachedServices = getCachedServices();
+    if (cachedServices.length === 0) {
+      console.warn(
+        'Failed to load services from the database and no cached services are available.',
+        error
+      );
+      return [];
+    }
+
+    console.warn(
+      'Failed to load services from the database; showing cached services.',
+      error
+    );
+    return cachedServices.map(withoutMonitoringStats);
+  }
+
   const monitoredServices = services.filter((service) => service.url);
 
   if (monitoredServices.length === 0) {
@@ -171,10 +195,21 @@ export async function getServicesWithStats(): Promise<Service[]> {
   }
 
   const serviceIds = monitoredServices.map((service) => service.id);
-  const [statsByService, uptimeByService] = await Promise.all([
-    getStatsByService(serviceIds),
-    getUptimeDaysByService(serviceIds, UPTIME_DAYS),
-  ]);
+  let statsByService: Map<number, ServiceStats>;
+  let uptimeByService: Map<number, UptimeDay[]>;
+
+  try {
+    [statsByService, uptimeByService] = await Promise.all([
+      getStatsByService(serviceIds),
+      getUptimeDaysByService(serviceIds, UPTIME_DAYS),
+    ]);
+  } catch (error) {
+    console.warn(
+      'Failed to load service stats from the database; showing services without uptime stats.',
+      error
+    );
+    return services.map(withoutMonitoringStats);
+  }
 
   return services.map((service) => {
     if (!service.url) {

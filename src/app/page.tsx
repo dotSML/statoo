@@ -1,4 +1,5 @@
 import { getServicesWithStats, deriveOverallStatus, getIncidents, ensureHealthChecksUpdated } from '@/lib/repository';
+import type { Incident } from '@/lib/types';
 import StatusPageClient from './status-page';
 
 export const dynamic = 'force-dynamic';
@@ -9,8 +10,10 @@ export default async function Home() {
 
   await ensureHealthChecksUpdated();
   const services = await getServicesWithStats();
-  const activeIncidents = await getIncidents({ activeOnly: true });
-  const recentIncidents = await getIncidents({ activeOnly: false, limit: 10 });
+  const [activeIncidents, recentIncidents] = await Promise.all([
+    getIncidentsSafely({ activeOnly: true }),
+    getIncidentsSafely({ activeOnly: false, limit: 10 }),
+  ]);
   const overallStatus = deriveOverallStatus(services);
 
   return (
@@ -23,4 +26,16 @@ export default async function Home() {
       overallStatus={overallStatus}
     />
   );
+}
+
+async function getIncidentsSafely(options: {
+  activeOnly: boolean;
+  limit?: number;
+}): Promise<Incident[]> {
+  try {
+    return await getIncidents(options);
+  } catch (error) {
+    console.warn('Failed to load incidents for the public status page.', error);
+    return [];
+  }
 }
