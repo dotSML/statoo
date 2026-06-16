@@ -26,6 +26,7 @@ at `/`.
 | `ADMIN_PASSWORD` | Yes | Password for the admin dashboard |
 | `PAGE_TITLE` | No | Public status page title |
 | `PAGE_DESCRIPTION` | No | Public status page description |
+| `HEALTH_CHECK_BUFFER_LIMIT` | No | Max health-check results to keep in memory while PostgreSQL is unavailable; defaults to `5000` |
 | `VAPID_PUBLIC_KEY` | For push | Server-side VAPID public key |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | For push | Browser-visible copy of the same public key |
 | `VAPID_PRIVATE_KEY` | For push | VAPID private key |

@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import type { DatabaseStatus } from './types';
 
 let pool: Pool | null = null;
 
@@ -21,6 +22,32 @@ export function getPool(): Pool {
   }
 
   return pool;
+}
+
+export async function checkDatabaseStatus(): Promise<DatabaseStatus> {
+  const checkedAt = new Date().toISOString();
+
+  try {
+    await getPool().query('SELECT 1');
+    return {
+      ok: true,
+      checkedAt,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      checkedAt,
+      message: getDatabaseErrorMessage(error),
+    };
+  }
+}
+
+function getDatabaseErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return 'PostgreSQL is unavailable.';
 }
 
 let migrated = false;

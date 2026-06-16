@@ -1,26 +1,34 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
-  Service, Incident, ServiceStatus, IncidentStatus,
+  Service, Incident, ServiceStatus, IncidentStatus, DatabaseStatus,
   STATUS_LABELS,
 } from '@/lib/types';
 
 interface AdminDashboardProps {
   initialServices: Service[];
   initialIncidents: Incident[];
+  initialDatabaseStatus: DatabaseStatus;
 }
 
 export default function AdminDashboard({
   initialServices,
   initialIncidents,
+  initialDatabaseStatus,
 }: AdminDashboardProps) {
   const router = useRouter();
   const [services, setServices] = useState(initialServices);
   const [incidents, setIncidents] = useState(initialIncidents);
+  const [databaseStatus, setDatabaseStatus] = useState(initialDatabaseStatus);
+  const [databaseNotice, setDatabaseNotice] = useState<{
+    tone: 'success' | 'error';
+    text: string;
+  } | null>(null);
+  const databaseDownNotifiedRef = useRef(false);
   const [refreshingChecks, setRefreshingChecks] = useState(false);
   const [sendingTestNotification, setSendingTestNotification] = useState(false);
   const [clearingSubscriptions, setClearingSubscriptions] = useState(false);
@@ -28,6 +36,94 @@ export default function AdminDashboard({
     tone: 'success' | 'error';
     text: string;
   } | null>(null);
+  const databaseAvailable = databaseStatus.ok;
+
+  const refreshAdminData = useCallback(async () => {
+    const [svcRes, incRes] = await Promise.all([
+      fetch('/api/services', { cache: 'no-store' }),
+      fetch('/api/incidents?limit=20', { cache: 'no-store' }),
+    ]);
+
+    if (svcRes.ok) {
+      setServices(await svcRes.json());
+    }
+
+    if (incRes.ok) {
+      setIncidents(await incRes.json());
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function pollDatabaseStatus() {
+      try {
+        const status = await fetchDatabaseStatus();
+        if (!cancelled) {
+          setDatabaseStatus(status);
+        }
+      } catch {
+        if (!cancelled) {
+          setDatabaseStatus({
+            ok: false,
+            checkedAt: new Date().toISOString(),
+            message: 'Unable to verify PostgreSQL status.',
+          });
+        }
+      }
+    }
+
+    const interval = setInterval(pollDatabaseStatus, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (databaseStatus.ok) {
+      if (databaseDownNotifiedRef.current) {
+        setDatabaseNotice({
+          tone: 'success',
+          text: 'PostgreSQL connection restored.',
+        });
+        router.refresh();
+        refreshAdminData().catch((error) => {
+          console.error('Failed to refresh admin data after database recovery:', error);
+        });
+      }
+      databaseDownNotifiedRef.current = false;
+      return;
+    }
+
+    if (databaseDownNotifiedRef.current) {
+      return;
+    }
+
+    databaseDownNotifiedRef.current = true;
+    setDatabaseNotice({
+      tone: 'error',
+      text: 'PostgreSQL is unavailable. Admin writes are paused until it recovers.',
+    });
+
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('Statoo database unavailable', {
+        body: 'PostgreSQL is down. Health-check writes are being buffered in memory.',
+      });
+    }
+  }, [databaseStatus.ok, refreshAdminData, router]);
+
+  function blockIfDatabaseDown(action: string): boolean {
+    if (databaseAvailable) {
+      return false;
+    }
+
+    setDatabaseNotice({
+      tone: 'error',
+      text: `Cannot ${action} while PostgreSQL is unavailable.`,
+    });
+    return true;
+  }
 
   async function handleRefreshChecks() {
     setRefreshingChecks(true);
@@ -35,10 +131,8 @@ export default function AdminDashboard({
       const res = await fetch('/api/services/check', { method: 'POST' });
       if (res.ok) {
         router.refresh();
-        const svcRes = await fetch('/api/services');
-        if (svcRes.ok) {
-          setServices(await svcRes.json());
-        }
+        await refreshAdminData();
+        setDatabaseStatus(await fetchDatabaseStatus());
       } else {
         alert('Failed to refresh health checks');
       }
@@ -51,6 +145,7 @@ export default function AdminDashboard({
   }
 
   async function handleSendTestNotification() {
+    if (blockIfDatabaseDown('send test notifications')) return;
     setTestNotificationMessage(null);
     setSendingTestNotification(true);
     try {
@@ -81,6 +176,7 @@ export default function AdminDashboard({
   }
 
   async function handleClearSubscriptions() {
+    if (blockIfDatabaseDown('clear subscriptions')) return;
     if (!confirm('Clear all saved push subscriptions? Devices will need to subscribe again.')) return;
     setTestNotificationMessage(null);
     setClearingSubscriptions(true);
@@ -135,6 +231,7 @@ export default function AdminDashboard({
 
   async function handleSubmitService(e: FormEvent) {
     e.preventDefault();
+    if (blockIfDatabaseDown('save services')) return;
     setSvcLoading(true);
     const payload = {
       name: svcName,
@@ -192,6 +289,7 @@ export default function AdminDashboard({
   }
 
   async function handleDeleteService(id: number) {
+    if (blockIfDatabaseDown('delete services')) return;
     if (!confirm('Delete this service and all its data?')) return;
     const res = await fetch(`/api/services/${id}`, { method: 'DELETE' });
     if (res.ok) {
@@ -202,6 +300,7 @@ export default function AdminDashboard({
 
   async function handlePostIncident(e: FormEvent) {
     e.preventDefault();
+    if (blockIfDatabaseDown('post incidents')) return;
     setIncLoading(true);
     try {
       const res = await fetch('/api/incidents', {
@@ -230,6 +329,7 @@ export default function AdminDashboard({
   }
 
   async function handleResolveIncident(id: number) {
+    if (blockIfDatabaseDown('update incidents')) return;
     const res = await fetch(`/api/incidents/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -245,6 +345,7 @@ export default function AdminDashboard({
   }
 
   async function handleUpdateIncidentStatus(id: number, status: IncidentStatus) {
+    if (blockIfDatabaseDown('update incidents')) return;
     const res = await fetch(`/api/incidents/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -257,6 +358,7 @@ export default function AdminDashboard({
   }
 
   async function handleDeleteIncident(id: number) {
+    if (blockIfDatabaseDown('delete incidents')) return;
     if (!confirm('Delete this incident?')) return;
     const res = await fetch(`/api/incidents/${id}`, { method: 'DELETE' });
     if (res.ok) {
@@ -294,14 +396,14 @@ export default function AdminDashboard({
               <button
                 onClick={handleSendTestNotification}
                 className="btn btn-ghost"
-                disabled={sendingTestNotification || clearingSubscriptions}
+                disabled={sendingTestNotification || clearingSubscriptions || !databaseAvailable}
               >
                 {sendingTestNotification ? 'Sending Test...' : 'Send Test Notification'}
               </button>
               <button
                 onClick={handleClearSubscriptions}
                 className="btn btn-ghost"
-                disabled={clearingSubscriptions || sendingTestNotification}
+                disabled={clearingSubscriptions || sendingTestNotification || !databaseAvailable}
               >
                 {clearingSubscriptions ? 'Clearing...' : 'Clear Subscriptions'}
               </button>
@@ -321,7 +423,33 @@ export default function AdminDashboard({
               {testNotificationMessage.text}
             </p>
           )}
+          {databaseNotice && (
+            <p className={`admin-header-feedback admin-header-feedback--${databaseNotice.tone}`}>
+              {databaseNotice.text}
+            </p>
+          )}
         </header>
+
+        {!databaseAvailable && (
+          <div className="admin-db-alert fade-in fade-in-delay-1" role="alert">
+            <div className="admin-db-alert-main">
+              <div className="status-indicator" data-status="major_outage" />
+              <div className="admin-db-alert-copy">
+                <p className="admin-db-alert-title">PostgreSQL is unavailable</p>
+                <p className="admin-db-alert-text">
+                  Admin changes and push subscription actions are paused. Health-check
+                  results stay in memory and will be written when the database returns.
+                </p>
+                {databaseStatus.message && (
+                  <p className="admin-db-alert-detail">{databaseStatus.message}</p>
+                )}
+              </div>
+            </div>
+            <span className="admin-db-alert-time">
+              Checked {formatClockTime(databaseStatus.checkedAt)}
+            </span>
+          </div>
+        )}
 
         {/* Services Section */}
         <section className="admin-section fade-in fade-in-delay-1">
@@ -336,6 +464,7 @@ export default function AdminDashboard({
                 }
               }}
               className="btn btn-primary btn-sm"
+              disabled={!databaseAvailable}
             >
               {showServiceForm ? 'Cancel' : '+ Add Service'}
             </button>
@@ -418,7 +547,7 @@ export default function AdminDashboard({
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                <button type="submit" className="btn btn-primary" disabled={svcLoading}>
+                <button type="submit" className="btn btn-primary" disabled={svcLoading || !databaseAvailable}>
                   {svcLoading ? (editingService ? 'Saving...' : 'Adding...') : (editingService ? 'Save Changes' : 'Add Service')}
                 </button>
                 <button type="button" onClick={resetServiceForm} className="btn btn-ghost">
@@ -431,7 +560,11 @@ export default function AdminDashboard({
           {/* Services List */}
           <div className="admin-list">
             {services.length === 0 && (
-              <div className="admin-empty">No services yet. Add one above.</div>
+              <div className="admin-empty">
+                {databaseAvailable
+                  ? 'No services yet. Add one above.'
+                  : 'Services cannot be loaded while PostgreSQL is unavailable.'}
+              </div>
             )}
             {services.map(service => (
               <div key={service.id} className="admin-list-item">
@@ -472,6 +605,7 @@ export default function AdminDashboard({
                       setSvcStatus(service.status);
                       setShowServiceForm(true);
                     }}
+                    disabled={!databaseAvailable}
                     title="Edit service"
                   >
                     ✎
@@ -479,6 +613,7 @@ export default function AdminDashboard({
                   <button
                     className="btn btn-ghost btn-xs btn-danger"
                     onClick={() => handleDeleteService(service.id)}
+                    disabled={!databaseAvailable}
                     title="Delete service"
                   >
                     ✕
@@ -496,7 +631,7 @@ export default function AdminDashboard({
             <button
               onClick={() => setShowIncidentForm(!showIncidentForm)}
               className="btn btn-primary btn-sm"
-              disabled={services.length === 0}
+              disabled={services.length === 0 || !databaseAvailable}
             >
               {showIncidentForm ? 'Cancel' : '+ Post Incident'}
             </button>
@@ -560,7 +695,7 @@ export default function AdminDashboard({
                   required
                 />
               </div>
-              <button type="submit" className="btn btn-primary" disabled={incLoading}>
+              <button type="submit" className="btn btn-primary" disabled={incLoading || !databaseAvailable}>
                 {incLoading ? 'Posting...' : 'Post Incident'}
               </button>
             </form>
@@ -593,6 +728,7 @@ export default function AdminDashboard({
                         }
                       }}
                       className="form-input form-select form-select-sm"
+                      disabled={!databaseAvailable}
                     >
                       <option value="investigating">Investigating</option>
                       <option value="identified">Identified</option>
@@ -602,6 +738,7 @@ export default function AdminDashboard({
                     <button
                       className="btn btn-ghost btn-xs btn-danger"
                       onClick={() => handleDeleteIncident(incident.id)}
+                      disabled={!databaseAvailable}
                     >
                       ✕
                     </button>
@@ -631,6 +768,7 @@ export default function AdminDashboard({
                     <button
                       className="btn btn-ghost btn-xs btn-danger"
                       onClick={() => handleDeleteIncident(incident.id)}
+                      disabled={!databaseAvailable}
                     >
                       ✕
                     </button>
@@ -641,12 +779,38 @@ export default function AdminDashboard({
           )}
 
           {incidents.length === 0 && (
-            <div className="admin-empty">No incidents yet.</div>
+            <div className="admin-empty">
+              {databaseAvailable
+                ? 'No incidents yet.'
+                : 'Incidents cannot be loaded while PostgreSQL is unavailable.'}
+            </div>
           )}
         </section>
       </main>
     </div>
   );
+}
+
+async function fetchDatabaseStatus(): Promise<DatabaseStatus> {
+  const res = await fetch('/api/admin/database-status', { cache: 'no-store' });
+  if (!res.ok) {
+    throw new Error('Database status check failed.');
+  }
+
+  return res.json();
+}
+
+function formatClockTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return 'just now';
+  }
+
+  return date.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
 }
 
 function formatRelativeTime(iso: string): string {

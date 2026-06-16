@@ -35,6 +35,12 @@ export interface HealthCheckResult {
   serviceId?: number;
 }
 
+export interface DatabaseStatus {
+  ok: boolean;
+  checkedAt: string;
+  message?: string;
+}
+
 export interface UptimeDay {
   date: string;
   status: ServiceStatus;

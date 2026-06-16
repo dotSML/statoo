@@ -2,15 +2,29 @@ import { ensureMigrated, getPool } from '../db';
 import { checkHealth } from '../health';
 import type {
   HealthCheckResult,
+  Incident,
   Service,
   ServiceStatus,
   UptimeDay,
 } from '../types';
 import { STATUS_SEVERITY } from '../types';
 import { getIncidents } from './incidents';
-import { getServices, updateService } from './services';
+import { getCachedServices, getServices, updateService } from './services';
 
 const UPTIME_DAYS = 90;
+const HEALTH_CHECK_STALE_MS = 60_000;
+const DEFAULT_HEALTH_CHECK_BUFFER_LIMIT = 5000;
+
+interface BufferedHealthCheck {
+  serviceId: number;
+  result: HealthCheckResult;
+  queuedAt: string;
+}
+
+interface HealthCheckBufferState {
+  items: BufferedHealthCheck[];
+  flushPromise: Promise<void> | null;
+}
 
 interface ServiceStats {
   avgLatency: number | null;
@@ -18,6 +32,23 @@ interface ServiceStats {
 }
 
 export async function saveHealthCheck(
+  serviceId: number,
+  result: HealthCheckResult
+): Promise<void> {
+  await tryFlushBufferedHealthChecks();
+
+  try {
+    await insertHealthCheck(serviceId, result);
+  } catch (error) {
+    if (!shouldBufferHealthCheckWriteError(error)) {
+      throw error;
+    }
+
+    bufferHealthCheck(serviceId, result, error);
+  }
+}
+
+async function insertHealthCheck(
   serviceId: number,
   result: HealthCheckResult
 ): Promise<void> {
@@ -46,6 +77,7 @@ export async function getUptimeDaysForService(
 }
 
 export async function getLastHealthCheckTime(): Promise<Date | null> {
+  await tryFlushBufferedHealthChecks();
   await ensureMigrated();
   const { rows } = await getPool().query(
     'SELECT checked_at FROM health_checks ORDER BY checked_at DESC LIMIT 1'
@@ -54,11 +86,8 @@ export async function getLastHealthCheckTime(): Promise<Date | null> {
 }
 
 export async function runAllHealthChecks(): Promise<void> {
-  await ensureMigrated();
-  const [services, activeIncidents] = await Promise.all([
-    getServices(),
-    getIncidents({ activeOnly: true }),
-  ]);
+  const services = await getServicesForHealthChecks();
+  const activeIncidents = await getActiveIncidentsForHealthChecks();
 
   const incidentsByService = new Map<number, ServiceStatus[]>();
   for (const incident of activeIncidents) {
@@ -84,7 +113,16 @@ export async function runAllHealthChecks(): Promise<void> {
           result.status,
           ...(incidentsByService.get(service.id) ?? []),
         ]);
-        await updateService(service.id, { status: nextStatus });
+
+        try {
+          await updateService(service.id, { status: nextStatus });
+        } catch (error) {
+          console.error(
+            `Failed to update status for service ${service.id}:`,
+            error
+          );
+          return;
+        }
 
         if (
           service.status === 'operational'
@@ -103,8 +141,21 @@ export async function runAllHealthChecks(): Promise<void> {
 }
 
 export async function ensureHealthChecksUpdated(): Promise<void> {
-  const lastCheck = await getLastHealthCheckTime();
-  const isStale = !lastCheck || Date.now() - lastCheck.getTime() > 60_000;
+  let lastCheck: Date | null;
+
+  try {
+    lastCheck = await getLastHealthCheckTime();
+  } catch (error) {
+    lastCheck = getNewestBufferedHealthCheckTime();
+    console.warn(
+      'Failed to read latest persisted health check time; ' +
+        'using buffered health checks if available.',
+      error
+    );
+  }
+
+  const isStale =
+    !lastCheck || Date.now() - lastCheck.getTime() > HEALTH_CHECK_STALE_MS;
 
   if (isStale) {
     await runAllHealthChecks();
@@ -141,6 +192,177 @@ export async function getServicesWithStats(): Promise<Service[]> {
         uptimeByService.get(service.id) ?? createEmptyUptimeDays(UPTIME_DAYS),
     };
   });
+}
+
+async function getServicesForHealthChecks(): Promise<Service[]> {
+  try {
+    return await getServices();
+  } catch (error) {
+    const cachedServices = getCachedServices();
+    if (cachedServices.length === 0) {
+      throw error;
+    }
+
+    console.warn(
+      'Failed to load services from the database; ' +
+        `checking ${cachedServices.length} cached service definition(s).`,
+      error
+    );
+    return cachedServices;
+  }
+}
+
+async function getActiveIncidentsForHealthChecks(): Promise<Incident[]> {
+  try {
+    return await getIncidents({ activeOnly: true });
+  } catch (error) {
+    console.warn(
+      'Failed to load active incidents from the database; ' +
+        'continuing automated checks without incident overrides.',
+      error
+    );
+    return [];
+  }
+}
+
+async function tryFlushBufferedHealthChecks(): Promise<void> {
+  const state = getHealthCheckBufferState();
+  if (state.items.length === 0) {
+    return;
+  }
+
+  try {
+    await flushBufferedHealthChecks();
+  } catch (error) {
+    console.warn(
+      `Unable to flush ${state.items.length} buffered health check(s) yet.`,
+      error
+    );
+  }
+}
+
+async function flushBufferedHealthChecks(): Promise<void> {
+  const state = getHealthCheckBufferState();
+  if (state.items.length === 0) {
+    return;
+  }
+
+  if (state.flushPromise) {
+    return state.flushPromise;
+  }
+
+  state.flushPromise = (async () => {
+    while (state.items.length > 0) {
+      const item = state.items[0];
+
+      try {
+        await insertHealthCheck(item.serviceId, item.result);
+        state.items.shift();
+      } catch (error) {
+        if (shouldDropBufferedHealthCheck(error)) {
+          state.items.shift();
+          console.error(
+            `Dropping buffered health check for missing service ${item.serviceId}.`,
+            error
+          );
+          continue;
+        }
+
+        throw error;
+      }
+    }
+  })().finally(() => {
+    state.flushPromise = null;
+  });
+
+  return state.flushPromise;
+}
+
+function bufferHealthCheck(
+  serviceId: number,
+  result: HealthCheckResult,
+  error: unknown
+): void {
+  const state = getHealthCheckBufferState();
+  state.items.push({
+    serviceId,
+    result: { ...result },
+    queuedAt: new Date().toISOString(),
+  });
+
+  const overflow = state.items.length - getHealthCheckBufferLimit();
+  if (overflow > 0) {
+    state.items.splice(0, overflow);
+    console.warn(
+      `Dropped ${overflow} buffered health check(s) because the in-memory ` +
+        'buffer limit was reached.'
+    );
+  }
+
+  console.warn(
+    `Buffered health check for service ${serviceId}; ` +
+      `${state.items.length} pending write(s).`,
+    error
+  );
+}
+
+function getNewestBufferedHealthCheckTime(): Date | null {
+  const state = getHealthCheckBufferState();
+  let newest: Date | null = null;
+
+  for (const item of state.items) {
+    const checkedAt = new Date(item.result.checkedAt);
+    if (Number.isNaN(checkedAt.getTime())) {
+      continue;
+    }
+
+    if (!newest || checkedAt > newest) {
+      newest = checkedAt;
+    }
+  }
+
+  return newest;
+}
+
+function getHealthCheckBufferState(): HealthCheckBufferState {
+  const globalState = globalThis as typeof globalThis & {
+    __statooHealthCheckBuffer?: HealthCheckBufferState;
+  };
+
+  if (!globalState.__statooHealthCheckBuffer) {
+    globalState.__statooHealthCheckBuffer = {
+      items: [],
+      flushPromise: null,
+    };
+  }
+
+  return globalState.__statooHealthCheckBuffer;
+}
+
+function getHealthCheckBufferLimit(): number {
+  const configuredLimit = Number(process.env.HEALTH_CHECK_BUFFER_LIMIT);
+  return Number.isInteger(configuredLimit) && configuredLimit > 0
+    ? configuredLimit
+    : DEFAULT_HEALTH_CHECK_BUFFER_LIMIT;
+}
+
+function shouldBufferHealthCheckWriteError(error: unknown): boolean {
+  return !isDatabaseConfigError(error) && !shouldDropBufferedHealthCheck(error);
+}
+
+function shouldDropBufferedHealthCheck(error: unknown): boolean {
+  return getPostgresErrorCode(error) === '23503';
+}
+
+function getPostgresErrorCode(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code)
+    : undefined;
+}
+
+function isDatabaseConfigError(error: unknown): boolean {
+  return error instanceof Error
+    && error.message.includes('DATABASE_URL environment variable is not set');
 }
 
 async function getStatsByService(

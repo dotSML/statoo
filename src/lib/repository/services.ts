@@ -21,6 +21,29 @@ export interface UpdateServiceInput {
 const SERVICE_COLUMNS =
   'id, name, description, url, status, sort_order, created_at, expected_status_code';
 
+interface ServiceCacheState {
+  services: Service[] | null;
+}
+
+function getServiceCacheState(): ServiceCacheState {
+  const globalState = globalThis as typeof globalThis & {
+    __statooServiceCache?: ServiceCacheState;
+  };
+
+  if (!globalState.__statooServiceCache) {
+    globalState.__statooServiceCache = {
+      services: null,
+    };
+  }
+
+  return globalState.__statooServiceCache;
+}
+
+export function getCachedServices(): Service[] {
+  const services = getServiceCacheState().services;
+  return services ? services.map(cloneService) : [];
+}
+
 export async function getServices(): Promise<Service[]> {
   await ensureMigrated();
   const { rows } = await getPool().query(
@@ -28,7 +51,9 @@ export async function getServices(): Promise<Service[]> {
      FROM services
      ORDER BY sort_order ASC, id ASC`
   );
-  return rows.map(mapService);
+  const services = rows.map(mapService);
+  rememberServices(services);
+  return services;
 }
 
 export async function getServiceById(id: number): Promise<Service | null> {
@@ -39,7 +64,13 @@ export async function getServiceById(id: number): Promise<Service | null> {
      WHERE id = $1`,
     [id]
   );
-  return rows.length > 0 ? mapService(rows[0]) : null;
+  if (rows.length === 0) {
+    return null;
+  }
+
+  const service = mapService(rows[0]);
+  rememberService(service);
+  return service;
 }
 
 export async function createService(data: CreateServiceInput): Promise<Service> {
@@ -57,7 +88,9 @@ export async function createService(data: CreateServiceInput): Promise<Service> 
       data.status ?? 'operational',
     ]
   );
-  return mapService(rows[0]);
+  const service = mapService(rows[0]);
+  rememberService(service);
+  return service;
 }
 
 export async function updateService(
@@ -93,7 +126,13 @@ export async function updateService(
      RETURNING *`,
     values
   );
-  return rows.length > 0 ? mapService(rows[0]) : null;
+  if (rows.length === 0) {
+    return null;
+  }
+
+  const service = mapService(rows[0]);
+  rememberService(service);
+  return service;
 }
 
 export async function deleteService(id: number): Promise<boolean> {
@@ -102,7 +141,11 @@ export async function deleteService(id: number): Promise<boolean> {
     'DELETE FROM services WHERE id = $1',
     [id]
   );
-  return (rowCount ?? 0) > 0;
+  const deleted = (rowCount ?? 0) > 0;
+  if (deleted) {
+    forgetService(id);
+  }
+  return deleted;
 }
 
 function mapService(row: Record<string, unknown>): Service {
@@ -115,5 +158,44 @@ function mapService(row: Record<string, unknown>): Service {
     sortOrder: row.sort_order as number,
     createdAt: (row.created_at as Date).toISOString(),
     expectedStatusCode: (row.expected_status_code as number) ?? 200,
+  };
+}
+
+function rememberServices(services: Service[]): void {
+  getServiceCacheState().services = services.map(cloneService);
+}
+
+function rememberService(service: Service): void {
+  const state = getServiceCacheState();
+  if (!state.services) {
+    return;
+  }
+
+  const serviceIndex = state.services.findIndex((item) => item.id === service.id);
+  const cachedService = cloneService(service);
+  if (serviceIndex === -1) {
+    state.services = [...state.services, cachedService];
+  } else {
+    state.services = state.services.map((item, index) =>
+      index === serviceIndex ? cachedService : item
+    );
+  }
+
+  state.services.sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
+}
+
+function forgetService(id: number): void {
+  const state = getServiceCacheState();
+  if (!state.services) {
+    return;
+  }
+
+  state.services = state.services.filter((service) => service.id !== id);
+}
+
+function cloneService(service: Service): Service {
+  return {
+    ...service,
+    uptimeDays: service.uptimeDays?.map((day) => ({ ...day })),
   };
 }
