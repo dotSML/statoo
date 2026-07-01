@@ -14,6 +14,7 @@ import {
   getCachedServicesForHealthChecks,
   getServices,
   getServicesForHealthChecks as loadServicesForHealthChecks,
+  rememberPublicServices,
   updateService,
 } from './services';
 import type { ServiceForHealthCheck } from './services';
@@ -189,7 +190,7 @@ export async function getServicesWithStats(): Promise<Service[]> {
       'Failed to load services from the database; showing cached services.',
       error
     );
-    return cachedServices.map(withoutMonitoringStats);
+    return cachedServices.map(withCachedMonitoringStats);
   }
 
   const monitoredServices = services.filter((service) => service.url);
@@ -209,13 +210,13 @@ export async function getServicesWithStats(): Promise<Service[]> {
     ]);
   } catch (error) {
     console.warn(
-      'Failed to load service stats from the database; showing services without uptime stats.',
+      'Failed to load service stats from the database; showing cached stats when available.',
       error
     );
-    return services.map(withoutMonitoringStats);
+    return services.map(withCachedMonitoringStats);
   }
 
-  return services.map((service) => {
+  const servicesWithStats = services.map((service) => {
     if (!service.url) {
       return withoutMonitoringStats(service);
     }
@@ -231,6 +232,8 @@ export async function getServicesWithStats(): Promise<Service[]> {
         uptimeByService.get(service.id) ?? createEmptyUptimeDays(UPTIME_DAYS),
     };
   });
+  rememberPublicServices(servicesWithStats);
+  return servicesWithStats;
 }
 
 async function getHealthCheckServices(): Promise<ServiceForHealthCheck[]> {
@@ -544,6 +547,15 @@ function withoutMonitoringStats(service: Service): Service {
     avgLatency: null,
     uptimePercentage: 100,
     uptimeDays: [],
+  };
+}
+
+function withCachedMonitoringStats(service: Service): Service {
+  return {
+    ...service,
+    avgLatency: service.avgLatency ?? null,
+    uptimePercentage: service.uptimePercentage ?? 100,
+    uptimeDays: service.uptimeDays ?? [],
   };
 }
 

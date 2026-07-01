@@ -108,7 +108,7 @@ export default function AdminDashboard({
 
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification('Statoo database unavailable', {
-        body: 'PostgreSQL is down. Health-check writes are being buffered in memory.',
+        body: 'PostgreSQL is down. Health-check writes and status updates are being buffered in memory.',
       });
     }
   }, [databaseStatus.ok, refreshAdminData, router]);
@@ -471,7 +471,8 @@ export default function AdminDashboard({
                 <p className="admin-db-alert-title">PostgreSQL is unavailable</p>
                 <p className="admin-db-alert-text">
                   Admin changes and push subscription actions are paused. Health-check
-                  results stay in memory and will be written when the database returns.
+                  results and service status updates stay in memory and will be written
+                  when the database returns.
                 </p>
                 {databaseStatus.message && (
                   <p className="admin-db-alert-detail">{databaseStatus.message}</p>

@@ -531,14 +531,24 @@ textarea {
 
 .uptime-bar-segment {
   position: relative;
+  min-width: 0;
+  padding: 0;
+  border: 0;
   border-radius: 3px;
   background: var(--bg-elevated);
+  cursor: pointer;
   transition: transform 0.12s ease, opacity 0.12s ease;
 }
 
-.uptime-bar-segment:hover {
+.uptime-bar-segment:hover,
+.uptime-bar-segment:focus-visible {
   opacity: 0.82;
   transform: scaleY(1.08);
+}
+
+.uptime-bar-segment:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
 }
 
 .uptime-bar-segment[data-status="operational"] { background: var(--status-operational); }
@@ -564,12 +574,21 @@ textarea {
   color: var(--text-primary);
   font-size: 12px;
   line-height: 1.45;
+  overflow-wrap: anywhere;
   pointer-events: none;
   box-shadow: var(--shadow-soft);
 }
 
-.uptime-bar-segment:hover .tooltip {
+.tooltip--floating {
   display: block;
+  position: fixed;
+  bottom: auto;
+  max-width: min(220px, calc(100vw - 24px));
+  transform: translate(-50%, -100%);
+}
+
+.tooltip--floating[data-placement="below"] {
+  transform: translate(-50%, 0);
 }
 
 .uptime-legend {

@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type KeyboardEvent } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
-  Service, ServiceStatus, Incident,
+  Service, ServiceStatus, Incident, UptimeDay,
   STATUS_LABELS, INCIDENT_STATUS_LABELS,
 } from '@/lib/types';
 
@@ -23,6 +23,21 @@ interface BrowserCapabilities {
   swSupported: boolean;
 }
 
+interface UptimeTooltip {
+  id: string;
+  date: string;
+  status: string;
+  avgResponseTime: number | null;
+  left: number;
+  top: number;
+  placement: 'above' | 'below';
+}
+
+const TOOLTIP_MAX_WIDTH = 220;
+const TOOLTIP_GUTTER = 12;
+const TOOLTIP_VERTICAL_GAP = 10;
+const TOOLTIP_ESTIMATED_HEIGHT = 86;
+
 export default function StatusPageClient({
   pageTitle,
   pageDescription,
@@ -36,6 +51,7 @@ export default function StatusPageClient({
   const [recentIncidents] = useState(initialRecent);
   const [overallStatus, setOverallStatus] = useState(initialOverall);
   const [lastChecked, setLastChecked] = useState(new Date().toISOString());
+  const [uptimeTooltip, setUptimeTooltip] = useState<UptimeTooltip | null>(null);
 
   // PWA & Notification States
   const [isSubscribed, setIsSubscribed] = useState(false);
@@ -162,6 +178,60 @@ export default function StatusPageClient({
     const interval = setInterval(refresh, 60_000);
     return () => clearInterval(interval);
   }, [refresh]);
+
+  useEffect(() => {
+    if (!uptimeTooltip) return;
+
+    const dismissTooltip = () => setUptimeTooltip(null);
+
+    window.addEventListener('resize', dismissTooltip);
+    window.addEventListener('scroll', dismissTooltip, true);
+
+    return () => {
+      window.removeEventListener('resize', dismissTooltip);
+      window.removeEventListener('scroll', dismissTooltip, true);
+    };
+  }, [uptimeTooltip]);
+
+  const showUptimeTooltip = useCallback((
+    id: string,
+    day: UptimeDay,
+    target: HTMLElement
+  ) => {
+    const rect = target.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const tooltipWidth = Math.min(
+      TOOLTIP_MAX_WIDTH,
+      Math.max(0, viewportWidth - TOOLTIP_GUTTER * 2)
+    );
+    const minLeft = TOOLTIP_GUTTER + tooltipWidth / 2;
+    const maxLeft = viewportWidth - TOOLTIP_GUTTER - tooltipWidth / 2;
+    const centerLeft = rect.left + rect.width / 2;
+    const fitsAbove = rect.top > TOOLTIP_ESTIMATED_HEIGHT + TOOLTIP_GUTTER;
+
+    setUptimeTooltip({
+      id,
+      date: formatTooltipDate(day.date),
+      status: STATUS_LABELS[day.status],
+      avgResponseTime: day.avgResponseTime ?? null,
+      left: clamp(centerLeft, minLeft, maxLeft),
+      top: fitsAbove
+        ? rect.top - TOOLTIP_VERTICAL_GAP
+        : rect.bottom + TOOLTIP_VERTICAL_GAP,
+      placement: fitsAbove ? 'above' : 'below',
+    });
+  }, []);
+
+  const hideUptimeTooltip = useCallback(() => {
+    setUptimeTooltip(null);
+  }, []);
+
+  const handleTooltipKeyDown = useCallback((event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === 'Escape') {
+      hideUptimeTooltip();
+      event.currentTarget.blur();
+    }
+  }, [hideUptimeTooltip]);
 
   const hasServices = services.length > 0;
 
@@ -333,21 +403,29 @@ export default function StatusPageClient({
                         </span>
                       </div>
                       <div className="uptime-bar-container">
-                        {service.uptimeDays.map((day) => (
-                          <div key={day.date} className="uptime-bar-segment" data-status={day.status}>
-                            <div className="tooltip">
-                              <strong>{formatTooltipDate(day.date)}</strong>
-                              <br />
-                              Status: {STATUS_LABELS[day.status]}
-                              {day.avgResponseTime !== null && day.avgResponseTime !== undefined && (
-                                <>
-                                  <br />
-                                  Avg Latency: {day.avgResponseTime}ms
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                        {service.uptimeDays.map((day) => {
+                          const tooltipId = `${service.id}-${day.date}`;
+                          const latencyLabel = day.avgResponseTime !== null && day.avgResponseTime !== undefined
+                            ? `, average latency ${day.avgResponseTime}ms`
+                            : '';
+
+                          return (
+                            <button
+                              key={day.date}
+                              type="button"
+                              className="uptime-bar-segment"
+                              data-status={day.status}
+                              aria-label={`${formatTooltipDate(day.date)}: ${STATUS_LABELS[day.status]}${latencyLabel}`}
+                              aria-describedby={uptimeTooltip?.id === tooltipId ? 'uptime-tooltip' : undefined}
+                              onPointerEnter={(event) => showUptimeTooltip(tooltipId, day, event.currentTarget)}
+                              onPointerLeave={hideUptimeTooltip}
+                              onFocus={(event) => showUptimeTooltip(tooltipId, day, event.currentTarget)}
+                              onBlur={hideUptimeTooltip}
+                              onClick={(event) => showUptimeTooltip(tooltipId, day, event.currentTarget)}
+                              onKeyDown={handleTooltipKeyDown}
+                            />
+                          );
+                        })}
                       </div>
                       <div className="uptime-legend">
                         <span className="uptime-legend-label">
@@ -406,6 +484,29 @@ export default function StatusPageClient({
         )}
       </main>
 
+      {uptimeTooltip && (
+        <div
+          id="uptime-tooltip"
+          className="tooltip tooltip--floating"
+          data-placement={uptimeTooltip.placement}
+          role="tooltip"
+          style={{
+            left: uptimeTooltip.left,
+            top: uptimeTooltip.top,
+          }}
+        >
+          <strong>{uptimeTooltip.date}</strong>
+          <br />
+          Status: {uptimeTooltip.status}
+          {uptimeTooltip.avgResponseTime !== null && (
+            <>
+              <br />
+              Avg Latency: {uptimeTooltip.avgResponseTime}ms
+            </>
+          )}
+        </div>
+      )}
+
       {/* Footer */}
       <footer className="footer">
         <div className="page-container">
@@ -458,6 +559,11 @@ function formatTooltipDate(dateStr: string): string {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+function clamp(value: number, min: number, max: number): number {
+  if (min > max) return (min + max) / 2;
+  return Math.min(Math.max(value, min), max);
 }
 
 function urlBase64ToUint8Array(base64String: string) {

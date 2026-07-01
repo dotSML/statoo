@@ -2,6 +2,7 @@ export {
   createService,
   deleteService,
   getAdminServices,
+  getCachedAdminServices,
   getCachedServices,
   getServiceById,
   getServices,

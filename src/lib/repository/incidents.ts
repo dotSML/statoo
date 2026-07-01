@@ -1,7 +1,7 @@
 import { ensureMigrated, getPool } from '../db';
 import type { Incident, IncidentStatus, ServiceStatus } from '../types';
 import { STATUS_SEVERITY } from '../types';
-import { getServiceById } from './services';
+import { getServiceById, updateCachedServiceStatus } from './services';
 
 export interface GetIncidentsOptions {
   activeOnly?: boolean;
@@ -23,42 +23,75 @@ export interface UpdateIncidentInput {
   status?: IncidentStatus;
 }
 
+interface IncidentCacheState {
+  incidents: Incident[] | null;
+}
+
+function getIncidentCacheState(): IncidentCacheState {
+  const globalState = globalThis as typeof globalThis & {
+    __statooIncidentCache?: IncidentCacheState;
+  };
+
+  if (!globalState.__statooIncidentCache) {
+    globalState.__statooIncidentCache = {
+      incidents: null,
+    };
+  }
+
+  return globalState.__statooIncidentCache;
+}
+
 export async function getIncidents(
   options: GetIncidentsOptions = {}
 ): Promise<Incident[]> {
-  await ensureMigrated();
+  try {
+    await ensureMigrated();
 
-  const conditions: string[] = [];
-  const values: unknown[] = [];
+    const conditions: string[] = [];
+    const values: unknown[] = [];
 
-  if (options.activeOnly) {
-    conditions.push("i.status != 'resolved'");
+    if (options.activeOnly) {
+      conditions.push("i.status != 'resolved'");
+    }
+    if (options.serviceId !== undefined) {
+      values.push(options.serviceId);
+      conditions.push(`i.service_id = $${values.length}`);
+    }
+
+    const where = conditions.length > 0
+      ? `WHERE ${conditions.join(' AND ')}`
+      : '';
+    let limit = '';
+    if (options.limit !== undefined) {
+      values.push(options.limit);
+      limit = `LIMIT $${values.length}`;
+    }
+
+    const { rows } = await getPool().query(
+      `SELECT i.*, s.name AS service_name
+       FROM incidents i
+       JOIN services s ON s.id = i.service_id
+       ${where}
+       ORDER BY i.created_at DESC
+       ${limit}`,
+      values
+    );
+
+    const incidents = rows.map(mapIncident);
+    rememberIncidents(incidents);
+    return incidents;
+  } catch (error) {
+    const cachedIncidents = getCachedIncidents(options);
+    if (cachedIncidents.length > 0) {
+      console.warn(
+        'Failed to load incidents from the database; showing cached incidents.',
+        error
+      );
+      return cachedIncidents;
+    }
+
+    throw error;
   }
-  if (options.serviceId !== undefined) {
-    values.push(options.serviceId);
-    conditions.push(`i.service_id = $${values.length}`);
-  }
-
-  const where = conditions.length > 0
-    ? `WHERE ${conditions.join(' AND ')}`
-    : '';
-  let limit = '';
-  if (options.limit !== undefined) {
-    values.push(options.limit);
-    limit = `LIMIT $${values.length}`;
-  }
-
-  const { rows } = await getPool().query(
-    `SELECT i.*, s.name AS service_name
-     FROM incidents i
-     JOIN services s ON s.id = i.service_id
-     ${where}
-     ORDER BY i.created_at DESC
-     ${limit}`,
-    values
-  );
-
-  return rows.map(mapIncident);
 }
 
 export async function createIncident(
@@ -79,6 +112,7 @@ export async function createIncident(
 
   const incident = mapIncident(rows[0]);
   incident.serviceName = service?.name;
+  rememberIncident(incident);
 
   if (
     service?.status === 'operational'
@@ -136,7 +170,9 @@ export async function updateIncident(
     await reconcileServiceStatus(rows[0].service_id as number);
   }
 
-  return mapIncident(rows[0]);
+  const incident = mapIncident(rows[0]);
+  rememberIncident(incident);
+  return incident;
 }
 
 export async function deleteIncident(id: number): Promise<boolean> {
@@ -151,6 +187,7 @@ export async function deleteIncident(id: number): Promise<boolean> {
   }
 
   await reconcileServiceStatus(rows[0].service_id as number);
+  forgetIncident(id);
   return true;
 }
 
@@ -190,6 +227,62 @@ async function reconcileServiceStatus(serviceId: number): Promise<void> {
     'UPDATE services SET status = $1 WHERE id = $2',
     [nextStatus, serviceId]
   );
+  updateCachedServiceStatus(serviceId, nextStatus);
+}
+
+function getCachedIncidents(options: GetIncidentsOptions): Incident[] {
+  const incidents = getIncidentCacheState().incidents;
+  if (!incidents) {
+    return [];
+  }
+
+  let result = incidents.map(cloneIncident);
+  if (options.activeOnly) {
+    result = result.filter((incident) => incident.status !== 'resolved');
+  }
+  if (options.serviceId !== undefined) {
+    result = result.filter((incident) => incident.serviceId === options.serviceId);
+  }
+  result.sort((a, b) =>
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+  return options.limit === undefined ? result : result.slice(0, options.limit);
+}
+
+function rememberIncidents(incidents: Incident[]): void {
+  const state = getIncidentCacheState();
+  const existingById = new Map(
+    (state.incidents ?? []).map((incident) => [incident.id, incident])
+  );
+
+  for (const incident of incidents) {
+    const existing = existingById.get(incident.id);
+    existingById.set(incident.id, {
+      ...cloneIncident(incident),
+      serviceName: incident.serviceName ?? existing?.serviceName,
+    });
+  }
+
+  state.incidents = Array.from(existingById.values()).sort((a, b) =>
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+}
+
+function rememberIncident(incident: Incident): void {
+  rememberIncidents([incident]);
+}
+
+function forgetIncident(id: number): void {
+  const state = getIncidentCacheState();
+  if (!state.incidents) {
+    return;
+  }
+
+  state.incidents = state.incidents.filter((incident) => incident.id !== id);
+}
+
+function cloneIncident(incident: Incident): Incident {
+  return { ...incident };
 }
 
 function mapIncident(row: Record<string, unknown>): Incident {

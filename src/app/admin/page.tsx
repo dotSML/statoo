@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { validateSession } from '@/lib/auth';
 import { checkDatabaseStatus } from '@/lib/db';
-import { getAdminServices, getCachedServices, getIncidents } from '@/lib/repository';
+import { getAdminServices, getCachedAdminServices, getIncidents } from '@/lib/repository';
 import type { DatabaseStatus, Incident, Service } from '@/lib/types';
 import AdminDashboard from './admin-dashboard';
 
@@ -14,7 +14,7 @@ export default async function AdminPage() {
   }
 
   let databaseStatus = await checkDatabaseStatus();
-  let services: Service[] = getCachedServices();
+  let services: Service[] = getCachedAdminServices();
   let incidents: Incident[] = [];
 
   if (databaseStatus.ok) {
@@ -26,7 +26,7 @@ export default async function AdminPage() {
     } catch (error) {
       console.error('Failed to load admin dashboard data:', error);
       databaseStatus = createUnavailableDatabaseStatus(error);
-      services = getCachedServices();
+      services = getCachedAdminServices();
       incidents = [];
     }
   }
