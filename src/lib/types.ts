@@ -74,6 +74,17 @@ export const STATUS_LABELS: Record<ServiceStatus, string> = {
   unknown: 'Unable to Determine',
 };
 
+/** Labels for a single service, uptime day, or incident severity —
+ * the page-wide phrases in STATUS_LABELS read oddly on one item. */
+export const SERVICE_STATUS_LABELS: Record<ServiceStatus, string> = {
+  operational: 'Operational',
+  degraded: 'Degraded',
+  partial_outage: 'Partial Outage',
+  major_outage: 'Major Outage',
+  maintenance: 'Maintenance',
+  unknown: 'Unknown',
+};
+
 export const INCIDENT_STATUS_LABELS: Record<IncidentStatus, string> = {
   investigating: 'Investigating',
   identified: 'Identified',

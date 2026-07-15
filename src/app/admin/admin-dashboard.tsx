@@ -6,8 +6,9 @@ import Link from 'next/link';
 import Image from 'next/image';
 import {
   Service, Incident, ServiceCheckType, ServiceStatus, IncidentStatus, DatabaseStatus,
-  STATUS_LABELS,
+  SERVICE_STATUS_LABELS,
 } from '@/lib/types';
+import ThemeToggle from '../theme-toggle';
 
 interface AdminDashboardProps {
   initialServices: Service[];
@@ -397,59 +398,59 @@ export default function AdminDashboard({
     <div className="page-wrapper">
       <main className="page-container admin-container">
         {/* Admin Header */}
-        <header className="header fade-in">
-          <div className="admin-header">
-            <div className="admin-header-main">
-              <div className="header-logo-row">
-                <Image
-                  src="/icon.png"
-                  alt="Statoo Logo"
-                  className="header-logo"
-                  width={48}
-                  height={48}
-                  priority
-                />
-                <div>
-                  <h1 className="service-name">Admin Dashboard</h1>
-                  <p className="service-description">Manage services and incidents</p>
-                </div>
-              </div>
-              <div className="admin-system-status">
-                <span
-                  className="admin-db-pill"
-                  data-status={databaseAvailable ? 'operational' : 'major_outage'}
-                  title={`PostgreSQL checked ${formatClockTime(databaseStatus.checkedAt)}`}
-                >
-                  <span className="admin-db-pill-dot" />
-                  <span>{databaseAvailable ? 'Postgres OK' : 'Postgres Down'}</span>
-                </span>
+        <header className="admin-header fade-in">
+          <div className="topbar">
+            <div className="brand">
+              <Image
+                src="/icon.png"
+                alt="Statoo Logo"
+                className="brand-logo"
+                width={40}
+                height={40}
+                priority
+              />
+              <div className="brand-copy">
+                <h1 className="brand-name">Admin Dashboard</h1>
+                <p className="brand-desc">Manage services and incidents</p>
               </div>
             </div>
-            <div className="admin-header-actions">
-              <button
-                onClick={handleSendTestNotification}
-                className="btn btn-ghost"
-                disabled={sendingTestNotification || clearingSubscriptions || !databaseAvailable}
+            <div className="topbar-actions">
+              <span
+                className="admin-db-pill"
+                data-status={databaseAvailable ? 'operational' : 'major_outage'}
+                title={`PostgreSQL checked ${formatClockTime(databaseStatus.checkedAt)}`}
               >
-                {sendingTestNotification ? 'Sending Test...' : 'Send Test Notification'}
-              </button>
-              <button
-                onClick={handleClearSubscriptions}
-                className="btn btn-ghost"
-                disabled={clearingSubscriptions || sendingTestNotification || !databaseAvailable}
-              >
-                {clearingSubscriptions ? 'Clearing...' : 'Clear Subscriptions'}
-              </button>
-              <button
-                onClick={handleRefreshChecks}
-                className="btn btn-ghost"
-                disabled={refreshingChecks || services.length === 0}
-              >
-                {refreshingChecks ? 'Refreshing...' : 'Refresh Health Checks'}
-              </button>
-              <Link href="/" className="btn btn-ghost">View Status Page</Link>
-              <button onClick={handleLogout} className="btn btn-ghost">Logout</button>
+                <span className="admin-db-pill-dot" />
+                <span>{databaseAvailable ? 'Postgres OK' : 'Postgres Down'}</span>
+              </span>
+              <ThemeToggle />
             </div>
+          </div>
+          <div className="admin-toolbar">
+            <button
+              onClick={handleSendTestNotification}
+              className="btn btn-ghost btn-sm"
+              disabled={sendingTestNotification || clearingSubscriptions || !databaseAvailable}
+            >
+              {sendingTestNotification ? 'Sending Test...' : 'Send Test Notification'}
+            </button>
+            <button
+              onClick={handleClearSubscriptions}
+              className="btn btn-ghost btn-sm"
+              disabled={clearingSubscriptions || sendingTestNotification || !databaseAvailable}
+            >
+              {clearingSubscriptions ? 'Clearing...' : 'Clear Subscriptions'}
+            </button>
+            <button
+              onClick={handleRefreshChecks}
+              className="btn btn-ghost btn-sm"
+              disabled={refreshingChecks || services.length === 0}
+            >
+              {refreshingChecks ? 'Refreshing...' : 'Refresh Health Checks'}
+            </button>
+            <span className="admin-toolbar-spacer" />
+            <Link href="/" className="btn btn-ghost btn-sm">View Status Page</Link>
+            <button onClick={handleLogout} className="btn btn-ghost btn-sm">Logout</button>
           </div>
           {testNotificationMessage && (
             <p className={`admin-header-feedback admin-header-feedback--${testNotificationMessage.tone}`}>
@@ -466,7 +467,7 @@ export default function AdminDashboard({
         {!databaseAvailable && (
           <div className="admin-db-alert fade-in fade-in-delay-1" role="alert">
             <div className="admin-db-alert-main">
-              <div className="status-indicator" data-status="major_outage" />
+              <div className="status-dot" data-status="major_outage" />
               <div className="admin-db-alert-copy">
                 <p className="admin-db-alert-title">PostgreSQL is unavailable</p>
                 <p className="admin-db-alert-text">
@@ -487,7 +488,7 @@ export default function AdminDashboard({
 
         {/* Services Section */}
         <section className="admin-section fade-in fade-in-delay-1">
-          <div className="admin-section-header">
+          <div className="section-head">
             <h2 className="section-title">Services</h2>
             <button
               onClick={() => {
@@ -507,7 +508,7 @@ export default function AdminDashboard({
           {/* Add/Edit Service Form */}
           {showServiceForm && (
             <form onSubmit={handleSubmitService} className="admin-form">
-              <h3 className="form-title" style={{ fontSize: '15px', fontWeight: '600', marginBottom: '8px', color: 'var(--text-primary)' }}>
+              <h3 className="form-title">
                 {editingService ? `Edit Service: ${editingService.name}` : 'Add New Service'}
               </h3>
               <div className="form-row">
@@ -593,7 +594,7 @@ export default function AdminDashboard({
                       />
                     </div>
                   </div>
-                  <div className="form-row" style={{ gridTemplateColumns: '1fr' }}>
+                  <div className="form-row form-row--single">
                     <div className="form-group">
                       <label htmlFor="svc-jellyfin-media" className="form-label">Media URL or Item ID *</label>
                       <input
@@ -639,7 +640,7 @@ export default function AdminDashboard({
                 )}
                 <div className="form-group">
                   <label htmlFor="svc-status" className="form-label">
-                    Status {svcUrl && <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>(Note: health check will overwrite)</span>}
+                    Status {svcUrl && <span className="form-hint">(health check will overwrite)</span>}
                   </label>
                   <select
                     id="svc-status"
@@ -655,7 +656,7 @@ export default function AdminDashboard({
                   </select>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+              <div className="form-actions">
                 <button type="submit" className="btn btn-primary" disabled={svcLoading || !databaseAvailable}>
                   {svcLoading ? (editingService ? 'Saving...' : 'Adding...') : (editingService ? 'Save Changes' : 'Add Service')}
                 </button>
@@ -678,24 +679,18 @@ export default function AdminDashboard({
             {services.map(service => (
               <div key={service.id} className="admin-list-item">
                 <div className="admin-list-left">
-                  <div className="check-dot" data-status={service.status} />
+                  <div className="status-dot" data-status={service.status} />
                   <div className="admin-list-info">
                     <span className="admin-list-name">
                       {service.name}
                       {service.url && (
-                        <span className="admin-list-url-badge" style={{
-                          fontSize: '11px',
-                          color: 'var(--text-tertiary)',
-                          marginLeft: '8px',
-                          fontWeight: 'normal',
-                        }}>
-                          ({service.url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}
+                        <span className="admin-list-url">
+                          {service.url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}
                           {service.checkType === 'jellyfin'
-                            ? ' · Jellyfin'
+                            ? ' · jellyfin'
                             : service.expectedStatusCode && service.expectedStatusCode !== 200
                               ? ` → ${service.expectedStatusCode}`
                               : ''}
-                          )
                         </span>
                       )}
                     </span>
@@ -705,8 +700,8 @@ export default function AdminDashboard({
                   </div>
                 </div>
                 <div className="admin-list-actions">
-                  <span className="check-status-label" data-status={service.status}>
-                    {STATUS_LABELS[service.status]}
+                  <span className="status-pill" data-status={service.status}>
+                    {SERVICE_STATUS_LABELS[service.status]}
                   </span>
                   <button
                     className="btn btn-ghost btn-xs"
@@ -744,7 +739,7 @@ export default function AdminDashboard({
 
         {/* Post Incident Section */}
         <section className="admin-section fade-in fade-in-delay-2">
-          <div className="admin-section-header">
+          <div className="section-head">
             <h2 className="section-title">Incidents</h2>
             <button
               onClick={() => setShowIncidentForm(!showIncidentForm)}
@@ -813,9 +808,11 @@ export default function AdminDashboard({
                   required
                 />
               </div>
-              <button type="submit" className="btn btn-primary" disabled={incLoading || !databaseAvailable}>
-                {incLoading ? 'Posting...' : 'Post Incident'}
-              </button>
+              <div className="form-actions">
+                <button type="submit" className="btn btn-primary" disabled={incLoading || !databaseAvailable}>
+                  {incLoading ? 'Posting...' : 'Post Incident'}
+                </button>
+              </div>
             </form>
           )}
 
@@ -826,7 +823,7 @@ export default function AdminDashboard({
               {activeIncidents.map(incident => (
                 <div key={incident.id} className="admin-list-item incident-item" data-severity={incident.severity}>
                   <div className="admin-list-left">
-                    <div className="check-dot" data-status={incident.severity} />
+                    <div className="status-dot" data-status={incident.severity} />
                     <div className="admin-list-info">
                       <span className="admin-list-name">{incident.title}</span>
                       <span className="admin-list-desc">
@@ -873,7 +870,7 @@ export default function AdminDashboard({
               {resolvedIncidents.map(incident => (
                 <div key={incident.id} className="admin-list-item incident-item incident-item--resolved">
                   <div className="admin-list-left">
-                    <div className="check-dot" data-status="operational" />
+                    <div className="status-dot" data-status="operational" />
                     <div className="admin-list-info">
                       <span className="admin-list-name">{incident.title}</span>
                       <span className="admin-list-desc">
@@ -882,7 +879,7 @@ export default function AdminDashboard({
                     </div>
                   </div>
                   <div className="admin-list-actions">
-                    <span className="incident-status-badge" data-status="resolved">Resolved</span>
+                    <span className="status-pill" data-status="resolved">Resolved</span>
                     <button
                       className="btn btn-ghost btn-xs btn-danger"
                       onClick={() => handleDeleteIncident(incident.id)}

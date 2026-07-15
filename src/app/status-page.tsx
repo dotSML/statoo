@@ -5,8 +5,9 @@ import Link from 'next/link';
 import Image from 'next/image';
 import {
   Service, ServiceStatus, Incident, UptimeDay,
-  STATUS_LABELS, INCIDENT_STATUS_LABELS,
+  STATUS_LABELS, SERVICE_STATUS_LABELS, INCIDENT_STATUS_LABELS,
 } from '@/lib/types';
+import ThemeToggle from './theme-toggle';
 
 interface StatusPageClientProps {
   pageTitle: string;
@@ -212,7 +213,7 @@ export default function StatusPageClient({
     setUptimeTooltip({
       id,
       date: formatTooltipDate(day.date),
-      status: STATUS_LABELS[day.status],
+      status: SERVICE_STATUS_LABELS[day.status],
       avgResponseTime: day.avgResponseTime ?? null,
       left: clamp(centerLeft, minLeft, maxLeft),
       top: fitsAbove
@@ -234,58 +235,64 @@ export default function StatusPageClient({
   }, [hideUptimeTooltip]);
 
   const hasServices = services.length > 0;
+  const operationalCount = services.filter(s => s.status === 'operational').length;
+  const heroStatus = hasServices ? overallStatus : 'unknown';
 
   return (
     <div className="page-wrapper">
       <main className="page-container">
-        {/* Header */}
-        <header className="header fade-in">
-          <div className="header-content">
-            <div className="header-logo-row">
-              <Image
-                src="/icon.png"
-                alt="Statoo Logo"
-                className="header-logo"
-                width={48}
-                height={48}
-                priority
-              />
-              <div>
-                <h1 className="service-name">{pageTitle}</h1>
-                <p className="service-description">{pageDescription}</p>
-              </div>
+        {/* Topbar */}
+        <header className="topbar fade-in">
+          <div className="brand">
+            <Image
+              src="/icon.png"
+              alt="Statoo Logo"
+              className="brand-logo"
+              width={40}
+              height={40}
+              priority
+            />
+            <div className="brand-copy">
+              <p className="brand-name">{pageTitle}</p>
+              <p className="brand-desc">{pageDescription}</p>
             </div>
-            <div className="mobile-route-switch">
-              <Link href="/admin" className="btn btn-ghost btn-sm btn-full">Go to Admin Panel</Link>
-            </div>
+          </div>
+          <div className="topbar-actions">
+            <Link href="/admin" className="btn btn-ghost btn-sm">Admin</Link>
+            <ThemeToggle />
           </div>
         </header>
 
-        {/* Overall Status Banner */}
-        <div
-          className="status-banner fade-in fade-in-delay-1"
-          data-status={hasServices ? overallStatus : 'unknown'}
-        >
-          <div className="status-left">
-            <div className="status-indicator" data-status={hasServices ? overallStatus : 'unknown'} />
-            <span className="status-label">
-              {hasServices ? STATUS_LABELS[overallStatus] : 'No services configured'}
+        {/* Overall status hero */}
+        <section className="hero fade-in fade-in-delay-1" data-status={heroStatus}>
+          <p className="hero-eyebrow">
+            <span className="hero-indicator" aria-hidden="true">
+              <span className="hero-indicator-ping" />
             </span>
-          </div>
-        </div>
+            System status
+          </p>
+          <h1 className="hero-title">
+            {hasServices ? STATUS_LABELS[overallStatus] : 'No services configured'}
+          </h1>
+          <p className="hero-meta">
+            <span suppressHydrationWarning>Last checked {formatTimestamp(lastChecked)}</span>
+            <span className="hero-meta-sep" aria-hidden="true">·</span>
+            <span>refreshes every 60s</span>
+          </p>
+        </section>
 
         {/* PWA Notification Control Banner */}
         {swSupported && (
           <div className="pwa-banner fade-in fade-in-delay-2">
             <div className="pwa-banner-content">
-              <h3 className="pwa-banner-title">
+              <h2 className="pwa-banner-title">
                 <svg className="pwa-banner-title-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />
                 </svg>
                 Outage Alerts
-              </h3>
+              </h2>
               <p className="pwa-banner-desc">
-                {isSubscribed 
+                {isSubscribed
                   ? "You are subscribed to receive push notifications when services go offline."
                   : "Get push notifications on your device as soon as a service goes down."
                 }
@@ -302,18 +309,18 @@ export default function StatusPageClient({
             {(!isIOS || isStandalone) && (
               <div className="pwa-banner-actions">
                 {isSubscribed ? (
-                  <button 
-                    onClick={handleUnsubscribe} 
+                  <button
+                    onClick={handleUnsubscribe}
                     disabled={subLoading}
-                    className="pwa-banner-btn pwa-banner-btn-secondary"
+                    className="btn btn-ghost btn-sm"
                   >
                     {subLoading ? 'Please wait...' : 'Mute Alerts'}
                   </button>
                 ) : (
-                  <button 
-                    onClick={handleSubscribe} 
+                  <button
+                    onClick={handleSubscribe}
                     disabled={subLoading}
-                    className="pwa-banner-btn"
+                    className="btn btn-primary btn-sm"
                   >
                     {subLoading ? 'Please wait...' : 'Notify Me'}
                   </button>
@@ -326,16 +333,19 @@ export default function StatusPageClient({
         {/* Active Incidents */}
         {activeIncidents.length > 0 && (
           <section className="incidents-section fade-in fade-in-delay-3">
-            <h2 className="section-title">Active Incidents</h2>
+            <div className="section-head">
+              <h2 className="section-title">Active Incidents</h2>
+              <span className="section-count">{activeIncidents.length} open</span>
+            </div>
             <div className="incidents-list">
               {activeIncidents.map(incident => (
                 <div key={incident.id} className="incident-card" data-severity={incident.severity}>
                   <div className="incident-header">
                     <div className="incident-title-row">
-                      <span className="incident-severity-badge" data-severity={incident.severity}>
-                        {STATUS_LABELS[incident.severity]}
+                      <span className="status-pill" data-severity={incident.severity}>
+                        {SERVICE_STATUS_LABELS[incident.severity]}
                       </span>
-                      <span className="incident-status-badge" data-status={incident.status}>
+                      <span className="status-pill" data-status={incident.status}>
                         {INCIDENT_STATUS_LABELS[incident.status]}
                       </span>
                     </div>
@@ -353,13 +363,16 @@ export default function StatusPageClient({
         {/* Services List */}
         {hasServices && (
           <section className="checks-section fade-in fade-in-delay-3">
-            <h2 className="section-title">Services</h2>
+            <div className="section-head">
+              <h2 className="section-title">Services</h2>
+              <span className="section-count">{operationalCount}/{services.length} operational</span>
+            </div>
             <div className="services-grid">
               {services.map(service => (
                 <div key={service.id} className="check-card">
                   <div className="check-card-header">
                     <div className="check-left">
-                      <div className="check-dot" data-status={service.status} />
+                      <div className="status-dot" data-status={service.status} />
                       <div className="check-info">
                         <div className="check-name-row">
                           <span className="check-name">{service.name}</span>
@@ -386,8 +399,8 @@ export default function StatusPageClient({
                       {service.avgLatency !== null && service.avgLatency !== undefined && (
                         <span className="check-response-time">{service.avgLatency}ms avg</span>
                       )}
-                      <span className="check-status-label" data-status={service.status}>
-                        {STATUS_LABELS[service.status]}
+                      <span className="status-pill" data-status={service.status}>
+                        {SERVICE_STATUS_LABELS[service.status]}
                       </span>
                     </div>
                   </div>
@@ -395,7 +408,7 @@ export default function StatusPageClient({
                   {service.url && service.uptimeDays && service.uptimeDays.length > 0 && (
                     <div className="uptime-section">
                       <div className="uptime-header">
-                        <span className="section-title">Uptime History</span>
+                        <span className="uptime-label">Uptime · 90 days</span>
                         <span className="uptime-percentage">
                           {service.uptimePercentage !== undefined && service.uptimePercentage !== null
                             ? `${service.uptimePercentage}%`
@@ -415,7 +428,7 @@ export default function StatusPageClient({
                               type="button"
                               className="uptime-bar-segment"
                               data-status={day.status}
-                              aria-label={`${formatTooltipDate(day.date)}: ${STATUS_LABELS[day.status]}${latencyLabel}`}
+                              aria-label={`${formatTooltipDate(day.date)}: ${SERVICE_STATUS_LABELS[day.status]}${latencyLabel}`}
                               aria-describedby={uptimeTooltip?.id === tooltipId ? 'uptime-tooltip' : undefined}
                               onPointerEnter={(event) => showUptimeTooltip(tooltipId, day, event.currentTarget)}
                               onPointerLeave={hideUptimeTooltip}
@@ -442,34 +455,39 @@ export default function StatusPageClient({
           </section>
         )}
 
-        {/* Recent Incidents */}
+        {/* Incident history timeline */}
         {recentIncidents.length > 0 && (
           <section className="recent-incidents-section fade-in fade-in-delay-4">
-            <h2 className="section-title">Recent Incidents</h2>
-            <div className="incidents-list">
+            <div className="section-head">
+              <h2 className="section-title">Incident History</h2>
+              <span className="section-count">last {recentIncidents.length}</span>
+            </div>
+            <ol className="timeline">
               {recentIncidents.map(incident => (
-                <div
+                <li
                   key={incident.id}
-                  className={`incident-card incident-card--compact ${incident.status === 'resolved' ? 'incident-card--resolved' : ''}`}
-                  data-severity={incident.severity}
+                  className={`timeline-item ${incident.status === 'resolved' ? 'timeline-item--resolved' : ''}`}
                 >
-                  <div className="incident-compact-header">
-                    <div className="incident-compact-left">
-                      <div className="check-dot" data-status={incident.status === 'resolved' ? 'operational' : incident.severity} />
-                      <h3 className="incident-title">{incident.title}</h3>
-                    </div>
-                    <span className="incident-status-badge" data-status={incident.status}>
+                  <span
+                    className="timeline-dot"
+                    data-status={incident.status === 'resolved' ? 'operational' : incident.severity}
+                    aria-hidden="true"
+                  />
+                  <div className="timeline-header">
+                    <h3 className="timeline-title">{incident.title}</h3>
+                    <span className="status-pill" data-status={incident.status}>
                       {INCIDENT_STATUS_LABELS[incident.status]}
                     </span>
                   </div>
-                  <p className="incident-message">{incident.message}</p>
-                  <div className="incident-meta">
-                    <span className="incident-service">{incident.serviceName}</span>
-                    <span className="incident-time">{formatRelativeTime(incident.createdAt)}</span>
+                  <p className="timeline-message">{incident.message}</p>
+                  <div className="timeline-meta">
+                    <span>{incident.serviceName}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{formatRelativeTime(incident.createdAt)}</span>
                   </div>
-                </div>
+                </li>
               ))}
-            </div>
+            </ol>
           </section>
         )}
 
@@ -514,8 +532,8 @@ export default function StatusPageClient({
             <span className="footer-powered">
               Powered by <a href="https://github.com" target="_blank" rel="noopener noreferrer">Statoo</a>
             </span>
-            <span className="footer-timestamp">
-              Updated: {formatTimestamp(lastChecked)}
+            <span className="footer-note" suppressHydrationWarning>
+              Updated {formatTimestamp(lastChecked)}
             </span>
           </div>
         </div>
