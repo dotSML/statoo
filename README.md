@@ -50,10 +50,25 @@ proves that files can actually be opened and streamed.
 Jellyfin passwords are stored server-side and are never returned by the public
 status APIs.
 
+### Slow responses and outage alerts
+
+“Slow Responses” means a health check succeeded but took longer than the warning
+limit. It does not mean the service is down. HTTP checks warn above **5 seconds**
+and time out after **10 seconds**. Jellyfin playback checks warn above **10 seconds**
+and time out after **20 seconds**, allowing time for authentication and media reads.
+
+Automatic slow-response warnings are recorded in status and uptime history but do
+not send push notifications. Automatic push alerts are sent when a service enters
+a partial or major outage, including when it was previously slow. Repeated checks
+during the same outage do not send another alert; a new outage after recovery does.
+Manually published incidents can still send slow-response alerts, with wording
+that describes slowness instead of saying the service is down.
+
 ## Commands
 
 ```bash
 npm run dev
+npm test
 npm run lint
 npm run build
 npm start

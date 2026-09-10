@@ -129,10 +129,9 @@ export async function runAllHealthChecks(): Promise<void> {
           return;
         }
 
-        if (
-          service.status === 'operational'
-          && isOutageStatus(nextStatus)
-        ) {
+        // Slow but successful checks stay visible on the dashboard without
+        // sending outage alerts. Still alert if a slow service later fails.
+        if (!isOutageStatus(service.status) && isOutageStatus(nextStatus)) {
           await notifyOutageSafely(service.name, nextStatus);
         }
       } catch (error) {
@@ -569,7 +568,6 @@ function isOutageStatus(status: ServiceStatus): boolean {
   return (
     status === 'major_outage'
     || status === 'partial_outage'
-    || status === 'degraded'
   );
 }
 

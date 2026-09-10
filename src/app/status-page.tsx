@@ -293,8 +293,8 @@ export default function StatusPageClient({
               </h2>
               <p className="pwa-banner-desc">
                 {isSubscribed
-                  ? "You are subscribed to receive push notifications when services go offline."
-                  : "Get push notifications on your device as soon as a service goes down."
+                  ? "You are subscribed to outage alerts and published incidents. Automatic slow-response warnings appear here without sending an alert."
+                  : "Get alerts for outages and published incidents. Automatic slow-response warnings appear here without sending an alert."
                 }
               </p>
               {isIOS && !isStandalone && (

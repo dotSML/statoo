@@ -649,7 +649,7 @@ export default function AdminDashboard({
                     className="form-input form-select"
                   >
                     <option value="operational">Operational</option>
-                    <option value="degraded">Degraded Performance</option>
+                    <option value="degraded">Slow Responses</option>
                     <option value="partial_outage">Partial Outage</option>
                     <option value="major_outage">Major Outage</option>
                     <option value="maintenance">Maintenance</option>
@@ -777,7 +777,7 @@ export default function AdminDashboard({
                     onChange={e => setIncSeverity(e.target.value as ServiceStatus)}
                     className="form-input form-select"
                   >
-                    <option value="degraded">Degraded Performance</option>
+                    <option value="degraded">Slow Responses</option>
                     <option value="partial_outage">Partial Outage</option>
                     <option value="major_outage">Major Outage</option>
                     <option value="maintenance">Maintenance</option>

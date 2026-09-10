@@ -99,17 +99,26 @@ export async function deleteAllSubscriptions(): Promise<PushDeleteStats> {
  * Send a push notification to all stored subscriptions when a service goes down.
  */
 export async function notifyOutage(serviceName: string, status: string): Promise<void> {
-  const statusMap: Record<string, string> = {
-    major_outage: 'Major Outage 🔴',
-    partial_outage: 'Partial Outage 🟡',
-    degraded: 'Degraded Performance 🟠',
+  const messages: Record<string, { title: string; body: string }> = {
+    major_outage: {
+      title: `${serviceName} is unavailable`,
+      body: 'A service outage was detected. Open the status page for details.',
+    },
+    partial_outage: {
+      title: `${serviceName} has a service problem`,
+      body: 'Some requests or features are failing. Open the status page for details.',
+    },
+    degraded: {
+      title: `${serviceName} is running slowly`,
+      body: 'Some actions may take longer than usual. Open the status page for details.',
+    },
   };
 
-  const statusText = statusMap[status] || status;
-
   const payload = {
-    title: `${serviceName} is DOWN`,
-    body: `Status changed to: ${statusText}`,
+    ...(messages[status] ?? {
+      title: `${serviceName} status changed`,
+      body: 'Open the status page for details.',
+    }),
     icon: '/icon-192x192.png',
     badge: '/icon-192x192.png',
     url: '/',

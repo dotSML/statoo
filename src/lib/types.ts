@@ -67,7 +67,7 @@ export interface Incident {
 
 export const STATUS_LABELS: Record<ServiceStatus, string> = {
   operational: 'All Systems Operational',
-  degraded: 'Degraded Performance',
+  degraded: 'Some Services Are Slow',
   partial_outage: 'Partial Outage',
   major_outage: 'Major Outage',
   maintenance: 'Under Maintenance',
@@ -78,7 +78,7 @@ export const STATUS_LABELS: Record<ServiceStatus, string> = {
  * the page-wide phrases in STATUS_LABELS read oddly on one item. */
 export const SERVICE_STATUS_LABELS: Record<ServiceStatus, string> = {
   operational: 'Operational',
-  degraded: 'Degraded',
+  degraded: 'Slow Responses',
   partial_outage: 'Partial Outage',
   major_outage: 'Major Outage',
   maintenance: 'Maintenance',

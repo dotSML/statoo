@@ -2,6 +2,9 @@ import { HealthCheckResult, ServiceStatus } from './types';
 import { checkJellyfinPlayback } from './jellyfin';
 import type { ServiceForHealthCheck } from './repository/services';
 
+const DEGRADED_AFTER_MS = 5_000;
+const HTTP_TIMEOUT_MS = 10_000;
+
 export async function checkHealth(url: string | null, expectedStatusCode: number = 200): Promise<HealthCheckResult> {
   if (!url) {
     return {
@@ -14,18 +17,16 @@ export async function checkHealth(url: string | null, expectedStatusCode: number
   }
 
   const start = Date.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-
     const response = await fetch(url, {
       method: 'GET',
       signal: controller.signal,
       cache: 'no-store',
     });
 
-    clearTimeout(timeout);
     const responseTime = Date.now() - start;
 
     const status = deriveStatus(response.status, responseTime, expectedStatusCode);
@@ -47,6 +48,8 @@ export async function checkHealth(url: string | null, expectedStatusCode: number
       checkedAt: new Date().toISOString(),
       url,
     };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -56,7 +59,7 @@ function deriveStatus(statusCode: number, responseTime: number, expectedStatusCo
     : statusCode === expectedStatusCode;
 
   if (isExpected) {
-    if (responseTime > 2000) return 'degraded';
+    if (responseTime > DEGRADED_AFTER_MS) return 'degraded';
     return 'operational';
   }
 
