@@ -48,52 +48,67 @@ export async function checkJellyfinPlayback(
       return createResult('major_outage', start, null);
     }
 
-    const auth = await authenticateJellyfin(
-      baseUrl,
-      username,
-      password,
-      controller.signal
-    );
-    if (!auth.ok) {
-      return createResult(
-        deriveFailureStatus(auth.statusCode),
-        start,
-        auth.statusCode
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const auth = await authenticateJellyfin(
+        baseUrl,
+        username,
+        password,
+        controller.signal
       );
-    }
+      if (!auth.ok) {
+        return createResult(
+          deriveFailureStatus(auth.statusCode),
+          start,
+          auth.statusCode
+        );
+      }
 
-    const playbackInfo = await fetchPlaybackInfo(
-      baseUrl,
-      mediaLocation.itemId,
-      auth.value.userId,
-      auth.value.token,
-      controller.signal
-    );
-    if (!playbackInfo.ok) {
-      return createResult(
-        deriveFailureStatus(playbackInfo.statusCode),
-        start,
-        playbackInfo.statusCode
+      const playbackInfo = await fetchPlaybackInfo(
+        baseUrl,
+        mediaLocation.itemId,
+        auth.value.userId,
+        auth.value.token,
+        controller.signal
       );
+      if (!playbackInfo.ok) {
+        if (playbackInfo.statusCode === 401 || playbackInfo.statusCode === 403) {
+          getJellyfinAuthCacheState().authByKey.delete(`${baseUrl}|${username}`);
+          if (attempt === 0) continue;
+        }
+        return createResult(
+          deriveFailureStatus(playbackInfo.statusCode),
+          start,
+          playbackInfo.statusCode
+        );
+      }
+
+      const stream = await fetch(mediaLocation.streamUrl, {
+        method: 'GET',
+        headers: buildPlaybackHeaders(auth.value.token),
+        signal: controller.signal,
+        cache: 'no-store',
+      });
+      if (stream.status === 401 || stream.status === 403) {
+        await stream.body?.cancel().catch(() => undefined);
+        getJellyfinAuthCacheState().authByKey.delete(`${baseUrl}|${username}`);
+        if (attempt === 0) continue;
+      }
+      const bytesRead =
+        stream.status === 200 || stream.status === 206
+          ? await readAtMost(stream, PLAYBACK_RANGE_BYTES)
+          : 0;
+      if (stream.status !== 200 && stream.status !== 206) {
+        await stream.body?.cancel().catch(() => undefined);
+      }
+      const responseTime = Date.now() - start;
+
+      return {
+        status: derivePlaybackStatus(stream.status, responseTime, bytesRead),
+        responseTime,
+        statusCode: stream.status,
+      };
     }
-
-    const stream = await fetch(mediaLocation.streamUrl, {
-      method: 'GET',
-      headers: buildPlaybackHeaders(auth.value.token),
-      signal: controller.signal,
-      cache: 'no-store',
-    });
-    const bytesRead =
-      stream.status === 200 || stream.status === 206
-        ? await readAtMost(stream, PLAYBACK_RANGE_BYTES)
-        : 0;
-    const responseTime = Date.now() - start;
-
-    return {
-      status: derivePlaybackStatus(stream.status, responseTime, bytesRead),
-      responseTime,
-      statusCode: stream.status,
-    };
+    return createResult('major_outage', start, null);
   } catch {
     return createResult('major_outage', start, null);
   } finally {
@@ -132,6 +147,7 @@ async function authenticateJellyfin(
   });
 
   if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
     getJellyfinAuthCacheState().authByKey.delete(cacheKey);
     return { ok: false, statusCode: response.status };
   }
@@ -176,6 +192,7 @@ async function fetchPlaybackInfo(
   });
 
   if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
     return { ok: false, statusCode: response.status };
   }
 

@@ -31,6 +31,10 @@ export async function checkHealth(url: string | null, expectedStatusCode: number
 
     const status = deriveStatus(response.status, responseTime, expectedStatusCode);
 
+    // Only headers are needed. Release the body/connection even for failures;
+    // leaving bodies unread can exhaust sockets in long-lived monitor workers.
+    await response.body?.cancel().catch(() => undefined);
+
     return {
       status,
       responseTime,
