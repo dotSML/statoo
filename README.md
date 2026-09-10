@@ -58,9 +58,23 @@ and time out after **10 seconds**. Jellyfin playback checks warn above **10 seco
 and time out after **20 seconds**, allowing time for authentication and media reads.
 
 Automatic slow-response warnings are recorded in status and uptime history but do
-not send push notifications. Automatic push alerts are sent when a service enters
-a partial or major outage, including when it was previously slow. Repeated checks
-during the same outage do not send another alert; a new outage after recovery does.
+not send push notifications. Automatic push alerts require **three consecutive
+failed checks**, spaced at least **60 seconds** apart. A single timeout or brief
+network glitch is still visible in the raw status/history but does not page you.
+An outage alerts once, and only **two consecutive successful checks** (including
+slow but successful responses) rearm notifications. Unknown results do not count
+as recovery. Gaps longer than five minutes reset pending confirmation counts.
+
+PostgreSQL coordinates checks and stores confirmation state across concurrent
+page loads, server instances, and restarts. If PostgreSQL is unavailable, new
+checks pause and no uncoordinated alerts are sent; the page can show cached data.
+An abandoned check lease expires after 90 seconds. Checks remain request-driven:
+three failed checks normally need at least two minutes, and take longer without
+regular status-page requests. Push claims are persisted before delivery to avoid
+duplicates; a process failure during delivery can lose that notification.
+
+Jellyfin retries authentication once when a playback request rejects its cached
+token, within the existing 20-second probe timeout.
 Manually published incidents can still send slow-response alerts, with wording
 that describes slowness instead of saying the service is down.
 

@@ -18,9 +18,10 @@ import {
   updateService,
 } from './services';
 import type { ServiceForHealthCheck } from './services';
+import { claimHealthCheck, completeHealthCheck, releaseHealthCheck } from './health-alerts';
+import type { HealthCheckLease } from './health-alerts';
 
 const UPTIME_DAYS = 90;
-const HEALTH_CHECK_STALE_MS = 60_000;
 const DEFAULT_HEALTH_CHECK_BUFFER_LIMIT = 5000;
 
 interface BufferedHealthCheck {
@@ -110,7 +111,11 @@ export async function runAllHealthChecks(): Promise<void> {
         return;
       }
 
+      let lease: HealthCheckLease | null = null;
       try {
+        lease = await claimHealthCheck(service.id);
+        if (!lease) return;
+
         const result = await checkServiceHealth(service);
         await saveHealthCheck(service.id, result);
 
@@ -129,44 +134,34 @@ export async function runAllHealthChecks(): Promise<void> {
           return;
         }
 
-        // Slow but successful checks stay visible on the dashboard without
-        // sending outage alerts. Still alert if a slow service later fails.
-        if (!isOutageStatus(service.status) && isOutageStatus(nextStatus)) {
-          await notifyOutageSafely(service.name, nextStatus);
+        // Confirm the probe itself, not a cached/manual incident override.
+        // Alert state is independent of the dashboard's latest raw status.
+        if (await completeHealthCheck(service.id, lease, result.status)) {
+          await notifyOutageSafely(service.name, result.status);
         }
       } catch (error) {
         console.error(
           `Failed to run health check for service ${service.id}:`,
           error
         );
+      } finally {
+        if (lease) {
+          await releaseHealthCheck(service.id, lease.token).catch((error) => {
+            console.warn(`Failed to release health check for service ${service.id}:`, error);
+          });
+        }
       }
     })
   );
 }
 
 export async function ensureHealthChecksUpdated(): Promise<void> {
-  let lastCheck: Date | null;
-
+  // Each service claims its own due check in PostgreSQL. A recent result for
+  // one service must not postpone another service or let parallel readers race.
   try {
-    lastCheck = await getLastHealthCheckTime();
+    await runAllHealthChecks();
   } catch (error) {
-    lastCheck = getNewestBufferedHealthCheckTime();
-    console.warn(
-      'Failed to read latest persisted health check time; ' +
-        'using buffered health checks if available.',
-      error
-    );
-  }
-
-  const isStale =
-    !lastCheck || Date.now() - lastCheck.getTime() > HEALTH_CHECK_STALE_MS;
-
-  if (isStale) {
-    try {
-      await runAllHealthChecks();
-    } catch (error) {
-      console.warn('Unable to update health checks right now.', error);
-    }
+    console.warn('Unable to update health checks right now.', error);
   }
 }
 
@@ -345,24 +340,6 @@ function bufferHealthCheck(
       `${state.items.length} pending write(s).`,
     error
   );
-}
-
-function getNewestBufferedHealthCheckTime(): Date | null {
-  const state = getHealthCheckBufferState();
-  let newest: Date | null = null;
-
-  for (const item of state.items) {
-    const checkedAt = new Date(item.result.checkedAt);
-    if (Number.isNaN(checkedAt.getTime())) {
-      continue;
-    }
-
-    if (!newest || checkedAt > newest) {
-      newest = checkedAt;
-    }
-  }
-
-  return newest;
 }
 
 function getHealthCheckBufferState(): HealthCheckBufferState {
@@ -561,13 +538,6 @@ function withCachedMonitoringStats(service: Service): Service {
 function findWorstStatus(statuses: ServiceStatus[]): ServiceStatus {
   return statuses.reduce((worst, status) =>
     STATUS_SEVERITY[status] < STATUS_SEVERITY[worst] ? status : worst
-  );
-}
-
-function isOutageStatus(status: ServiceStatus): boolean {
-  return (
-    status === 'major_outage'
-    || status === 'partial_outage'
   );
 }
 

@@ -90,6 +90,16 @@ export async function ensureMigrated(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_health_checks_service_checked
       ON health_checks (service_id, checked_at DESC);
 
+    CREATE TABLE IF NOT EXISTS health_alert_state (
+      service_id    INTEGER PRIMARY KEY REFERENCES services(id) ON DELETE CASCADE,
+      lease_token   UUID,
+      lease_until   TIMESTAMPTZ,
+      checked_at    TIMESTAMPTZ,
+      failures      INTEGER NOT NULL DEFAULT 0,
+      successes     INTEGER NOT NULL DEFAULT 0,
+      outage_active BOOLEAN NOT NULL DEFAULT FALSE
+    );
+
     CREATE TABLE IF NOT EXISTS incidents (
       id          SERIAL PRIMARY KEY,
       service_id  INTEGER REFERENCES services(id) ON DELETE CASCADE,
