@@ -521,6 +521,7 @@ export default function AdminDashboard({
                     onChange={e => setSvcName(e.target.value)}
                     className="form-input"
                     placeholder="e.g. API Server"
+                    maxLength={100}
                     required
                   />
                 </div>
@@ -549,6 +550,7 @@ export default function AdminDashboard({
                     onChange={e => setSvcUrl(e.target.value)}
                     className="form-input"
                     placeholder={svcCheckType === 'jellyfin' ? 'https://jellyfin.example.com' : 'https://api.example.com/health'}
+                    maxLength={2048}
                     required={svcCheckType === 'jellyfin'}
                   />
                 </div>
@@ -561,6 +563,7 @@ export default function AdminDashboard({
                     onChange={e => setSvcDesc(e.target.value)}
                     className="form-input"
                     placeholder="Brief description"
+                    maxLength={2000}
                   />
                 </div>
               </div>
@@ -576,6 +579,7 @@ export default function AdminDashboard({
                         onChange={e => setSvcJellyfinUsername(e.target.value)}
                         className="form-input"
                         placeholder="Monitor"
+                        maxLength={256}
                         required
                       />
                     </div>
@@ -590,6 +594,7 @@ export default function AdminDashboard({
                         onChange={e => setSvcJellyfinPassword(e.target.value)}
                         className="form-input"
                         placeholder={editingService?.hasJellyfinPassword ? 'Leave blank to keep current password' : 'Password'}
+                        maxLength={1024}
                         required={!editingService?.hasJellyfinPassword}
                       />
                     </div>
@@ -604,6 +609,7 @@ export default function AdminDashboard({
                         onChange={e => setSvcJellyfinMediaUrl(e.target.value)}
                         className="form-input"
                         placeholder="https://jellyfin.example.com/Items/item-id/Download"
+                        maxLength={2048}
                         required
                       />
                     </div>
@@ -793,6 +799,7 @@ export default function AdminDashboard({
                   onChange={e => setIncTitle(e.target.value)}
                   className="form-input"
                   placeholder="e.g. API response times elevated"
+                  maxLength={200}
                   required
                 />
               </div>
@@ -805,6 +812,7 @@ export default function AdminDashboard({
                   className="form-input form-textarea"
                   placeholder="Describe the issue and what you're doing about it..."
                   rows={3}
+                  maxLength={10000}
                   required
                 />
               </div>

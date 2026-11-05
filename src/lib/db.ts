@@ -15,6 +15,7 @@ export function getPool(): Pool {
       max: 5,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
+      statement_timeout: 15000,
       ssl: process.env.DATABASE_SSL === 'false'
         ? false
         : { rejectUnauthorized: false },
@@ -89,6 +90,9 @@ export async function ensureMigrated(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_health_checks_service_checked
       ON health_checks (service_id, checked_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_health_checks_checked_at
+      ON health_checks (checked_at);
 
     CREATE TABLE IF NOT EXISTS health_alert_state (
       service_id    INTEGER PRIMARY KEY REFERENCES services(id) ON DELETE CASCADE,

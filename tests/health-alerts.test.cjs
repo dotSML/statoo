@@ -162,6 +162,9 @@ async function monitorHarness(t, initialStatus = 'operational') {
       '../db': database, '../types': loadModule('src/lib/types.ts'),
       './health-alerts': policy, './services': services,
       './incidents': { getIncidents: async () => incidents },
+      './status': loadModule('src/lib/repository/status.ts', {
+        '../types': loadModule('src/lib/types.ts'),
+      }),
       '../health': { checkServiceHealth: async () => {
         probes += 1;
         return { status, checkedAt: new Date().toISOString(), url: 'https://example.test', responseTime: 100, statusCode: null };
@@ -277,6 +280,7 @@ test('database failure prevents uncoordinated probes or notifications', async ()
     './health-alerts': { claimHealthCheck: async () => { throw new Error('DB unavailable'); } },
     './services': { getServicesForHealthChecks: async () => [{ id: 1, url: 'https://example.test' }] },
     './incidents': { getIncidents: async () => [] },
+    './status': { findWorstStatus: (statuses) => statuses[0] },
     '../health': { checkServiceHealth: async () => { probed = true; } },
   }, { console: { ...console, error() {} } });
   await runAllHealthChecks();
@@ -354,4 +358,22 @@ test('persistent Jellyfin authorization failures stop after one retry', async ()
   const result = await checkJellyfinPlayback({ url: 'https://jellyfin.example.test', jellyfinUsername: 'monitor', jellyfinPassword: 'test-only', jellyfinMediaUrl: '12345678' });
   assert.equal(result.status, 'major_outage');
   assert.equal(auths, 2);
+});
+
+test('uptime history uses a 30-day window and the worst status per day', async (t) => {
+  const h = await monitorHarness(t);
+  await h.db.query(
+    `INSERT INTO health_checks (service_id, status, response_time, checked_at)
+     VALUES
+       (1, 'operational', 100, NOW()),
+       (1, 'major_outage', 200, NOW())`
+  );
+
+  const days = await h.current.getUptimeDaysForService(1);
+  assert.equal(days.length, 30);
+
+  const today = days[days.length - 1];
+  assert.equal(today.status, 'major_outage');
+  assert.equal(today.avgResponseTime, 150);
+  assert.ok(days.every((day, index) => index === days.length - 1 || day.status === 'unknown'));
 });

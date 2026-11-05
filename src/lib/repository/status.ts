@@ -6,11 +6,13 @@ export function deriveOverallStatus(services: Service[]): ServiceStatus {
 }
 
 export function findWorstStatus(statuses: ServiceStatus[]): ServiceStatus {
-  if (statuses.length === 0) {
+  const knownStatuses = statuses.filter((status) => status !== 'unknown');
+
+  if (knownStatuses.length === 0) {
     return 'unknown';
   }
 
-  return statuses.reduce<ServiceStatus>(
+  return knownStatuses.reduce<ServiceStatus>(
     (worst, status) =>
       STATUS_SEVERITY[status] < STATUS_SEVERITY[worst] ? status : worst,
     'operational'

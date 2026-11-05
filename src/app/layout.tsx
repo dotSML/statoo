@@ -30,8 +30,9 @@ export const viewport: Viewport = {
 
 // Resolves the theme before first paint: saved preference wins, then the
 // system preference. Runs in <head> so there is no flash (see the Next.js
-// "Preventing Flash" guide).
-const themeInitScript = `(function(){try{var t=localStorage.getItem('statoo-theme');if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}document.documentElement.setAttribute('data-theme',t)}catch(e){}})()`;
+// "Preventing Flash" guide). It also marks push-capable browsers before the
+// first paint so the PWA banner does not shift the page after hydration.
+const themeInitScript = `(function(){try{var t=localStorage.getItem('statoo-theme');if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}document.documentElement.setAttribute('data-theme',t)}catch(e){}try{if('serviceWorker' in navigator&&'PushManager' in window){document.documentElement.setAttribute('data-push','true')}}catch(e){}})()`;
 
 export default function RootLayout({
   children,

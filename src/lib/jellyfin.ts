@@ -1,7 +1,7 @@
 import type { ServiceStatus } from './types';
 import type { ServiceForHealthCheck } from './repository/services';
 
-const PLAYBACK_RANGE_BYTES = 1_048_576;
+const PLAYBACK_RANGE_BYTES = 64 * 1024;
 const PLAYBACK_TIMEOUT_MS = 20_000;
 const DEGRADED_AFTER_MS = 10_000;
 const AUTH_CACHE_MS = 15 * 60_000;

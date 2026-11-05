@@ -15,6 +15,8 @@ export {
   updateIncident,
 } from './incidents';
 export {
+  cleanupOldHealthChecks,
+  clearStatusStatsCache,
   ensureHealthChecksUpdated,
   getLastHealthCheckTime,
   getServicesWithStats,

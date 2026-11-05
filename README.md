@@ -1,7 +1,8 @@
 # Statoo
 
 A self-hosted status page for monitoring multiple services, publishing incidents,
-tracking uptime, and sending web push outage alerts.
+tracking uptime, and sending web push outage alerts. Uptime history is shown for
+the last 30 days.
 
 ## Quick Start
 
@@ -27,7 +28,9 @@ at `/`.
 | `PAGE_TITLE` | No | Public status page title |
 | `PAGE_DESCRIPTION` | No | Public status page description |
 | `HEALTH_CHECK_BUFFER_LIMIT` | No | Max health-check results to keep in memory while PostgreSQL is unavailable; defaults to `5000` |
+| `HEALTH_CHECK_RETENTION_DAYS` | No | Delete raw health checks older than this many days; defaults to `90` |
 | `SERVICE_UPDATE_BUFFER_LIMIT` | No | Max service status updates to keep in memory while PostgreSQL is unavailable; defaults to `1000` |
+| `MONITOR_ENABLED` | No | Set to `false` to disable the in-process health-check scheduler |
 | `VAPID_PUBLIC_KEY` | For push | Server-side VAPID public key |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | For push | Browser-visible copy of the same public key |
 | `VAPID_PRIVATE_KEY` | For push | VAPID private key |
@@ -44,7 +47,7 @@ node -e "const webpush=require('web-push'); console.log(webpush.generateVAPIDKey
 When adding a service in the admin dashboard, choose `Jellyfin Playback` as the
 check type. Provide the Jellyfin base URL, monitor username, monitor password,
 and a known-good media URL or item id. Statoo authenticates with Jellyfin, checks
-playback info, and reads a small byte range from the media endpoint so the check
+playback info, and reads a 64 KiB range from the media endpoint so the check
 proves that files can actually be opened and streamed.
 
 Jellyfin passwords are stored server-side and are never returned by the public
@@ -70,12 +73,16 @@ slow but successful responses) rearm notifications. Unknown results do not count
 as recovery. Gaps longer than five minutes reset pending confirmation counts.
 
 PostgreSQL coordinates checks and stores confirmation state across concurrent
-page loads, server instances, and restarts. If PostgreSQL is unavailable, new
-checks pause and no uncoordinated alerts are sent; the page can show cached data.
-An abandoned check lease expires after 90 seconds. Checks remain request-driven:
-three failed checks normally need at least two minutes, and take longer without
-regular status-page requests. Push claims are persisted before delivery to avoid
-duplicates; a process failure during delivery can lose that notification.
+server instances and restarts. The app runs an in-process monitor loop that
+starts shortly after boot and checks each service at most once every 60 seconds.
+Page requests never wait for probes: the status page renders the last known
+results and refreshes them in the background. Set `MONITOR_ENABLED=false` if
+another process should own scheduling. If PostgreSQL is unavailable, new checks
+pause and no uncoordinated alerts are sent; the page can show cached data. An
+abandoned check lease expires after 90 seconds. Push claims are persisted before
+delivery to avoid duplicates; a process failure during delivery can lose that
+notification. Raw health checks older than `HEALTH_CHECK_RETENTION_DAYS`
+(default 90) are removed automatically.
 
 Jellyfin retries authentication once when a playback request rejects its cached
 token, within the existing 20-second probe timeout.

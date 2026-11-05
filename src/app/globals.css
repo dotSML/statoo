@@ -674,8 +674,8 @@ textarea {
   line-height: 1.4;
 }
 
-.mobile-legend-text {
-  display: none;
+.hero-meta-delayed {
+  color: var(--status-degraded);
 }
 
 /* ── Tooltip ──────────────────────────────────── */
@@ -862,7 +862,7 @@ textarea {
 
 .pwa-banner {
   margin-top: 28px;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
@@ -871,6 +871,10 @@ textarea {
   border-radius: var(--radius-md);
   background: var(--bg-card);
   box-shadow: var(--shadow-card);
+}
+
+html[data-push='true'] .pwa-banner {
+  display: flex;
 }
 
 .pwa-banner-content {
@@ -1408,6 +1412,42 @@ textarea {
   opacity: 0.65;
 }
 
+/* ── Loading skeleton ─────────────────────────── */
+
+.loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 32px;
+}
+
+.loading-bar,
+.loading-card {
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  animation: loadingPulse 1.4s ease-in-out infinite;
+}
+
+.loading-bar {
+  width: 45%;
+  height: 16px;
+}
+
+.loading-bar--lg {
+  width: 65%;
+  height: 34px;
+}
+
+.loading-card {
+  height: 118px;
+}
+
+@keyframes loadingPulse {
+  0%,
+  100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
 /* ── Animations ───────────────────────────────── */
 
 @keyframes fadeInUp {
@@ -1462,6 +1502,12 @@ textarea {
   .theme-toggle {
     transition: none;
   }
+
+  .loading-bar,
+  .loading-card {
+    animation: none;
+    opacity: 1;
+  }
 }
 
 /* ── Responsive ───────────────────────────────── */
@@ -1515,18 +1561,6 @@ textarea {
 
   .uptime-bar-container {
     grid-template-columns: repeat(30, minmax(4px, 1fr));
-  }
-
-  .uptime-bar-segment:nth-child(-n + 60) {
-    display: none;
-  }
-
-  .desktop-legend-text {
-    display: none;
-  }
-
-  .mobile-legend-text {
-    display: inline;
   }
 
   .pwa-banner {

@@ -13,22 +13,25 @@ export default async function AdminPage() {
     redirect('/admin/login');
   }
 
-  let databaseStatus = await checkDatabaseStatus();
+  const databaseStatusPromise = checkDatabaseStatus();
   let services: Service[] = getCachedAdminServices();
   let incidents: Incident[] = [];
+  let databaseStatus: DatabaseStatus;
 
-  if (databaseStatus.ok) {
-    try {
-      [services, incidents] = await Promise.all([
-        getAdminServices(),
-        getIncidents({ limit: 20 }),
-      ]);
-    } catch (error) {
-      console.error('Failed to load admin dashboard data:', error);
+  try {
+    [services, incidents, databaseStatus] = await Promise.all([
+      getAdminServices(),
+      getIncidents({ limit: 20 }),
+      databaseStatusPromise,
+    ]);
+  } catch (error) {
+    databaseStatus = await databaseStatusPromise;
+    console.error('Failed to load admin dashboard data:', error);
+    if (databaseStatus.ok) {
       databaseStatus = createUnavailableDatabaseStatus(error);
-      services = getCachedAdminServices();
-      incidents = [];
     }
+    services = getCachedAdminServices();
+    incidents = [];
   }
 
   return (

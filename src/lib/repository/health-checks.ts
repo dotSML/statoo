@@ -7,8 +7,8 @@ import type {
   ServiceStatus,
   UptimeDay,
 } from '../types';
-import { STATUS_SEVERITY } from '../types';
 import { getIncidents } from './incidents';
+import { findWorstStatus } from './status';
 import {
   getCachedServices,
   getCachedServicesForHealthChecks,
@@ -21,8 +21,12 @@ import type { ServiceForHealthCheck } from './services';
 import { claimHealthCheck, completeHealthCheck, releaseHealthCheck } from './health-alerts';
 import type { HealthCheckLease } from './health-alerts';
 
-const UPTIME_DAYS = 90;
+const UPTIME_DAYS = 30;
 const DEFAULT_HEALTH_CHECK_BUFFER_LIMIT = 5000;
+const DEFAULT_RETENTION_DAYS = 90;
+const RETENTION_DELETE_BATCH_SIZE = 5000;
+const STATUS_STATS_CACHE_TTL_MS = 30_000;
+const STATUS_STATS_CACHE_MAX_ENTRIES = 100;
 
 interface BufferedHealthCheck {
   serviceId: number;
@@ -39,6 +43,24 @@ interface ServiceStats {
   avgLatency: number | null;
   uptimePercentage: number;
 }
+
+interface StatusStatsCacheEntry {
+  expiresAt: number;
+  value: unknown;
+}
+
+interface StatusStatsCacheState {
+  entries: Map<string, StatusStatsCacheEntry>;
+}
+
+const STATUS_BY_SEVERITY: Record<number, ServiceStatus> = {
+  1: 'major_outage',
+  2: 'partial_outage',
+  3: 'degraded',
+  4: 'maintenance',
+  5: 'operational',
+  6: 'unknown',
+};
 
 export async function saveHealthCheck(
   serviceId: number,
@@ -92,6 +114,42 @@ export async function getLastHealthCheckTime(): Promise<Date | null> {
     'SELECT checked_at FROM health_checks ORDER BY checked_at DESC LIMIT 1'
   );
   return rows.length > 0 ? new Date(rows[0].checked_at) : null;
+}
+
+export async function cleanupOldHealthChecks(): Promise<number> {
+  await ensureMigrated();
+
+  const retentionDays = getHealthCheckRetentionDays();
+  let removed = 0;
+
+  while (true) {
+    const { rowCount } = await getPool().query(
+      `DELETE FROM health_checks
+       WHERE id IN (
+         SELECT id
+         FROM health_checks
+         WHERE checked_at < NOW() - make_interval(days => $1)
+         LIMIT $2
+       )`,
+      [retentionDays, RETENTION_DELETE_BATCH_SIZE]
+    );
+
+    const deleted = rowCount ?? 0;
+    removed += deleted;
+
+    if (deleted < RETENTION_DELETE_BATCH_SIZE) {
+      break;
+    }
+  }
+
+  return removed;
+}
+
+function getHealthCheckRetentionDays(): number {
+  const configuredDays = Number(process.env.HEALTH_CHECK_RETENTION_DAYS);
+  return Number.isInteger(configuredDays) && configuredDays > 0
+    ? configuredDays
+    : DEFAULT_RETENTION_DAYS;
 }
 
 export async function runAllHealthChecks(): Promise<void> {
@@ -383,7 +441,80 @@ function isDatabaseConfigError(error: unknown): boolean {
     && error.message.includes('DATABASE_URL environment variable is not set');
 }
 
+function getStatusStatsCacheState(): StatusStatsCacheState {
+  const globalState = globalThis as typeof globalThis & {
+    __statooStatusStatsCache?: StatusStatsCacheState;
+  };
+
+  if (!globalState.__statooStatusStatsCache) {
+    globalState.__statooStatusStatsCache = {
+      entries: new Map(),
+    };
+  }
+
+  return globalState.__statooStatusStatsCache;
+}
+
+async function getCachedStatusValue<T>(
+  key: string,
+  load: () => Promise<T>
+): Promise<T> {
+  const cache = getStatusStatsCacheState();
+  const now = Date.now();
+  const cached = cache.entries.get(key);
+
+  if (cached && cached.expiresAt > now) {
+    return cached.value as T;
+  }
+
+  const value = await load();
+  cache.entries.set(key, {
+    expiresAt: now + STATUS_STATS_CACHE_TTL_MS,
+    value,
+  });
+  pruneStatusStatsCache(cache);
+  return value;
+}
+
+function pruneStatusStatsCache(cache: StatusStatsCacheState): void {
+  if (cache.entries.size <= STATUS_STATS_CACHE_MAX_ENTRIES) {
+    return;
+  }
+
+  const now = Date.now();
+  for (const [key, entry] of cache.entries) {
+    if (entry.expiresAt <= now) {
+      cache.entries.delete(key);
+    }
+  }
+
+  while (cache.entries.size > STATUS_STATS_CACHE_MAX_ENTRIES) {
+    const oldestKey = cache.entries.keys().next().value;
+    if (oldestKey === undefined) {
+      break;
+    }
+    cache.entries.delete(oldestKey);
+  }
+}
+
+export function clearStatusStatsCache(): void {
+  getStatusStatsCacheState().entries.clear();
+}
+
+function normalizeServiceIds(serviceIds: number[]): string {
+  return [...serviceIds].sort((a, b) => a - b).join(',');
+}
+
 async function getStatsByService(
+  serviceIds: number[]
+): Promise<Map<number, ServiceStats>> {
+  return getCachedStatusValue(
+    `stats:${normalizeServiceIds(serviceIds)}`,
+    () => loadStatsByService(serviceIds)
+  );
+}
+
+async function loadStatsByService(
   serviceIds: number[]
 ): Promise<Map<number, ServiceStats>> {
   const { rows } = await getPool().query(
@@ -428,6 +559,16 @@ async function getUptimeDaysByService(
   serviceIds: number[],
   days: number
 ): Promise<Map<number, UptimeDay[]>> {
+  return getCachedStatusValue(
+    `uptime:${days}:${normalizeServiceIds(serviceIds)}`,
+    () => loadUptimeDaysByService(serviceIds, days)
+  );
+}
+
+async function loadUptimeDaysByService(
+  serviceIds: number[],
+  days: number
+): Promise<Map<number, UptimeDay[]>> {
   await ensureMigrated();
   if (serviceIds.length === 0) {
     return new Map();
@@ -437,16 +578,14 @@ async function getUptimeDaysByService(
     `SELECT
        service_id,
        DATE(checked_at AT TIME ZONE 'UTC') AS date,
-       (ARRAY_AGG(status ORDER BY
-         CASE status
-           WHEN 'major_outage' THEN 1
-           WHEN 'partial_outage' THEN 2
-           WHEN 'degraded' THEN 3
-           WHEN 'maintenance' THEN 4
-           WHEN 'operational' THEN 5
-           ELSE 6
-         END
-       ))[1] AS worst_status,
+       MIN(CASE status
+         WHEN 'major_outage' THEN 1
+         WHEN 'partial_outage' THEN 2
+         WHEN 'degraded' THEN 3
+         WHEN 'maintenance' THEN 4
+         WHEN 'operational' THEN 5
+         ELSE 6
+       END) AS worst_severity,
        AVG(response_time) FILTER (
          WHERE response_time IS NOT NULL
        ) AS avg_response_time
@@ -466,7 +605,7 @@ async function getUptimeDaysByService(
     const serviceId = row.service_id as number;
     const serviceDays = recordedDays.get(serviceId) ?? new Map();
     serviceDays.set(formatDatabaseDate(row.date), {
-      status: row.worst_status as ServiceStatus,
+      status: STATUS_BY_SEVERITY[Number(row.worst_severity)] ?? 'unknown',
       avgResponseTime: row.avg_response_time
         ? Math.round(Number(row.avg_response_time))
         : null,
@@ -512,9 +651,24 @@ function createEmptyUptimeDays(days: number): UptimeDay[] {
 }
 
 function formatDatabaseDate(value: unknown): string {
-  return value instanceof Date
-    ? value.toISOString().slice(0, 10)
-    : String(value);
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  if (typeof value === 'string') {
+    return value.slice(0, 10);
+  }
+
+  if (
+    typeof value === 'object'
+    && value !== null
+    && 'toISOString' in value
+    && typeof (value as { toISOString?: unknown }).toISOString === 'function'
+  ) {
+    return (value as { toISOString: () => string }).toISOString().slice(0, 10);
+  }
+
+  return String(value);
 }
 
 function withoutMonitoringStats(service: Service): Service {
@@ -533,12 +687,6 @@ function withCachedMonitoringStats(service: Service): Service {
     uptimePercentage: service.uptimePercentage ?? 100,
     uptimeDays: service.uptimeDays ?? [],
   };
-}
-
-function findWorstStatus(statuses: ServiceStatus[]): ServiceStatus {
-  return statuses.reduce((worst, status) =>
-    STATUS_SEVERITY[status] < STATUS_SEVERITY[worst] ? status : worst
-  );
 }
 
 async function notifyOutageSafely(

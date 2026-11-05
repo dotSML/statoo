@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, type KeyboardEvent } from 'react';
+import { useState, useEffect, useCallback, useRef, type KeyboardEvent } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
@@ -16,6 +16,7 @@ interface StatusPageClientProps {
   activeIncidents: Incident[];
   recentIncidents: Incident[];
   overallStatus: ServiceStatus;
+  lastCheckedAt: string | null;
 }
 
 interface BrowserCapabilities {
@@ -46,13 +47,16 @@ export default function StatusPageClient({
   activeIncidents: initialActive,
   recentIncidents: initialRecent,
   overallStatus: initialOverall,
+  lastCheckedAt: initialLastChecked,
 }: StatusPageClientProps) {
   const [services, setServices] = useState(initialServices);
   const [activeIncidents, setActiveIncidents] = useState(initialActive);
   const [recentIncidents] = useState(initialRecent);
   const [overallStatus, setOverallStatus] = useState(initialOverall);
-  const [lastChecked, setLastChecked] = useState(new Date().toISOString());
+  const [lastChecked, setLastChecked] = useState<string | null>(initialLastChecked);
+  const [monitoringDelayed, setMonitoringDelayed] = useState(false);
   const [uptimeTooltip, setUptimeTooltip] = useState<UptimeTooltip | null>(null);
+  const refreshInFlight = useRef(false);
 
   // PWA & Notification States
   const [isSubscribed, setIsSubscribed] = useState(false);
@@ -161,6 +165,11 @@ export default function StatusPageClient({
   };
 
   const refresh = useCallback(async () => {
+    if (refreshInFlight.current) {
+      return;
+    }
+
+    refreshInFlight.current = true;
     try {
       const res = await fetch('/api/status', { cache: 'no-store' });
       if (res.ok) {
@@ -168,17 +177,65 @@ export default function StatusPageClient({
         setServices(data.services);
         setActiveIncidents(data.activeIncidents);
         setOverallStatus(data.status);
-        setLastChecked(data.checkedAt);
+        setLastChecked(data.checkedAt ?? null);
       }
     } catch {
       // keep last known state
+    } finally {
+      refreshInFlight.current = false;
     }
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(refresh, 60_000);
-    return () => clearInterval(interval);
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    const startPolling = () => {
+      if (!interval) {
+        interval = setInterval(refresh, 60_000);
+      }
+    };
+
+    const stopPolling = () => {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void refresh();
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+
+    startPolling();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [refresh]);
+
+  useEffect(() => {
+    const updateMonitoringState = () => {
+      if (!lastChecked) {
+        setMonitoringDelayed(services.some((service) => Boolean(service.url)));
+        return;
+      }
+
+      setMonitoringDelayed(
+        Date.now() - new Date(lastChecked).getTime() > 5 * 60_000
+      );
+    };
+
+    updateMonitoringState();
+    const interval = setInterval(updateMonitoringState, 30_000);
+    return () => clearInterval(interval);
+  }, [lastChecked, services]);
 
   useEffect(() => {
     if (!uptimeTooltip) return;
@@ -275,15 +332,22 @@ export default function StatusPageClient({
             {hasServices ? STATUS_LABELS[overallStatus] : 'No services configured'}
           </h1>
           <p className="hero-meta">
-            <span suppressHydrationWarning>Last checked {formatTimestamp(lastChecked)}</span>
+            <span suppressHydrationWarning>
+              Last checked {lastChecked ? formatTimestamp(lastChecked) : 'never'}
+            </span>
             <span className="hero-meta-sep" aria-hidden="true">·</span>
             <span>refreshes every 60s</span>
+            {monitoringDelayed && (
+              <>
+                <span className="hero-meta-sep" aria-hidden="true">·</span>
+                <span className="hero-meta-delayed">Monitoring delayed</span>
+              </>
+            )}
           </p>
         </section>
 
         {/* PWA Notification Control Banner */}
-        {swSupported && (
-          <div className="pwa-banner fade-in fade-in-delay-2">
+        <div className="pwa-banner fade-in fade-in-delay-2">
             <div className="pwa-banner-content">
               <h2 className="pwa-banner-title">
                 <svg className="pwa-banner-title-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -328,7 +392,6 @@ export default function StatusPageClient({
               </div>
             )}
           </div>
-        )}
 
         {/* Active Incidents */}
         {activeIncidents.length > 0 && (
@@ -353,7 +416,7 @@ export default function StatusPageClient({
                     <span className="incident-service">{incident.serviceName}</span>
                   </div>
                   <p className="incident-message">{incident.message}</p>
-                  <span className="incident-time">{formatRelativeTime(incident.createdAt)}</span>
+                  <span className="incident-time" suppressHydrationWarning>{formatRelativeTime(incident.createdAt)}</span>
                 </div>
               ))}
             </div>
@@ -408,7 +471,7 @@ export default function StatusPageClient({
                   {service.url && service.uptimeDays && service.uptimeDays.length > 0 && (
                     <div className="uptime-section">
                       <div className="uptime-header">
-                        <span className="uptime-label">Uptime · 90 days</span>
+                        <span className="uptime-label">Uptime · 30 days</span>
                         <span className="uptime-percentage">
                           {service.uptimePercentage !== undefined && service.uptimePercentage !== null
                             ? `${service.uptimePercentage}%`
@@ -441,10 +504,7 @@ export default function StatusPageClient({
                         })}
                       </div>
                       <div className="uptime-legend">
-                        <span className="uptime-legend-label">
-                          <span className="desktop-legend-text">90 days ago</span>
-                          <span className="mobile-legend-text">30 days ago</span>
-                        </span>
+                        <span className="uptime-legend-label">30 days ago</span>
                         <span className="uptime-legend-label">Today</span>
                       </div>
                     </div>
@@ -483,7 +543,7 @@ export default function StatusPageClient({
                   <div className="timeline-meta">
                     <span>{incident.serviceName}</span>
                     <span aria-hidden="true">·</span>
-                    <span>{formatRelativeTime(incident.createdAt)}</span>
+                    <span suppressHydrationWarning>{formatRelativeTime(incident.createdAt)}</span>
                   </div>
                 </li>
               ))}
@@ -533,7 +593,7 @@ export default function StatusPageClient({
               Powered by <a href="https://github.com" target="_blank" rel="noopener noreferrer">Statoo</a>
             </span>
             <span className="footer-note" suppressHydrationWarning>
-              Updated {formatTimestamp(lastChecked)}
+              Updated {lastChecked ? formatTimestamp(lastChecked) : 'never'}
             </span>
           </div>
         </div>
