@@ -326,11 +326,16 @@ function derivePlaybackStatus(
 }
 
 function deriveFailureStatus(statusCode: number | null): ServiceStatus {
+  // A 404 means the probe item or endpoint is missing. That is a monitoring
+  // configuration problem, not proof that Jellyfin itself is unavailable.
+  if (statusCode === 404) {
+    return 'unknown';
+  }
+
   if (
     statusCode === null
     || statusCode === 401
     || statusCode === 403
-    || statusCode === 404
     || statusCode >= 500
   ) {
     return 'major_outage';

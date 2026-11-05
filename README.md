@@ -50,6 +50,10 @@ proves that files can actually be opened and streamed.
 Jellyfin passwords are stored server-side and are never returned by the public
 status APIs.
 
+If the configured media URL or item id no longer exists, the Jellyfin probe
+reports the service as **unknown** rather than an outage. A missing probe item
+means playback cannot be verified; it does not necessarily mean Jellyfin is down.
+
 ### Slow responses and outage alerts
 
 “Slow Responses” means a health check succeeded but took longer than the warning

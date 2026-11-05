@@ -318,6 +318,28 @@ test('Jellyfin renews rejected cached tokens for playback info and stream reques
   }
 });
 
+test('a missing Jellyfin probe item is unknown, not an outage', async () => {
+  for (const stage of ['PlaybackInfo', 'Download']) {
+    const { checkJellyfinPlayback } = loadModule('src/lib/jellyfin.ts', {}, {
+      fetch: async (url) => {
+        const path = new URL(url).pathname;
+        if (path.includes('AuthenticateByName')) {
+          return Response.json({ AccessToken: 'token', User: { Id: 'user' } });
+        }
+        if (path.includes(stage)) return new Response('', { status: 404 });
+        if (path.includes('PlaybackInfo')) return Response.json({ MediaSources: [{ Id: 'media' }] });
+        return new Response('media', { status: 206 });
+      },
+    });
+    const result = await checkJellyfinPlayback({
+      url: 'https://jellyfin.example.test', jellyfinUsername: 'monitor',
+      jellyfinPassword: 'test-only', jellyfinMediaUrl: '12345678',
+    });
+    assert.equal(result.status, 'unknown', stage);
+    assert.equal(result.statusCode, 404, stage);
+  }
+});
+
 test('persistent Jellyfin authorization failures stop after one retry', async () => {
   let auths = 0;
   const { checkJellyfinPlayback } = loadModule('src/lib/jellyfin.ts', {}, {
