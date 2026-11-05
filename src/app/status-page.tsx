@@ -432,7 +432,7 @@ export default function StatusPageClient({
             </div>
             <div className="services-grid">
               {services.map(service => (
-                <div key={service.id} className="check-card">
+                <div key={service.id} className="check-card" data-status={service.status}>
                   <div className="check-card-header">
                     <div className="check-left">
                       <div className="status-dot" data-status={service.status} />

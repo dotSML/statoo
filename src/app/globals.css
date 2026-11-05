@@ -136,7 +136,7 @@ textarea {
 
 .page-container {
   width: 100%;
-  max-width: 780px;
+  max-width: 840px;
   margin: 0 auto;
   padding: 0 24px 72px;
 }
@@ -248,7 +248,16 @@ textarea {
 /* ── Hero (overall status) ────────────────────── */
 
 .hero {
-  margin-top: 64px;
+  margin-top: 48px;
+  padding: 28px 30px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(120% 150% at 0% 0%,
+      color-mix(in srgb, var(--status-c) 12%, transparent),
+      transparent 62%),
+    var(--bg-card);
+  box-shadow: var(--shadow-card);
   --status-c: var(--status-unknown);
 }
 
@@ -288,9 +297,9 @@ textarea {
 }
 
 .hero-title {
-  margin-top: 14px;
-  color: var(--status-c);
-  font-size: clamp(30px, 5.4vw, 42px);
+  margin-top: 12px;
+  color: color-mix(in srgb, var(--status-c) 82%, var(--text-primary));
+  font-size: clamp(28px, 4.8vw, 38px);
   font-weight: 600;
   letter-spacing: -0.03em;
   line-height: 1.08;
@@ -302,7 +311,7 @@ textarea {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  margin-top: 16px;
+  margin-top: 14px;
   color: var(--text-tertiary);
   font-family: var(--font-mono);
   font-size: 12px;
@@ -320,7 +329,7 @@ textarea {
 .incidents-section,
 .recent-incidents-section,
 .admin-section {
-  margin-top: 48px;
+  margin-top: 40px;
 }
 
 .section-head {
@@ -328,8 +337,8 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 16px;
-  padding-bottom: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 9px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -443,15 +452,15 @@ textarea {
   --pill-c: var(--status-unknown);
   display: inline-flex;
   align-items: center;
-  padding: 5px 9px;
-  border: 1px solid color-mix(in srgb, var(--pill-c) 28%, transparent);
-  border-radius: var(--radius-full);
-  background: color-mix(in srgb, var(--pill-c) 10%, transparent);
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--pill-c) 13%, transparent);
   color: var(--pill-c);
   font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.05em;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   line-height: 1;
   text-transform: uppercase;
   white-space: nowrap;
@@ -486,7 +495,12 @@ textarea {
 }
 
 .services-grid {
-  gap: 12px;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-card);
 }
 
 .incidents-list {
@@ -494,64 +508,74 @@ textarea {
 }
 
 .check-card {
+  --row-accent: transparent;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  overflow: hidden;
-  padding: 20px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-card);
-  box-shadow: var(--shadow-card);
-  transition: border-color 0.15s ease;
+  gap: 16px;
+  padding: 18px 20px;
+  border: 0;
+  background: transparent;
+  box-shadow: inset 3px 0 0 var(--row-accent);
+  transition: background 0.15s ease;
+}
+
+.check-card + .check-card {
+  border-top: 1px solid var(--border-subtle);
 }
 
 .check-card:hover {
-  border-color: var(--border);
+  background: var(--bg-card-hover);
 }
+
+.check-card[data-status='degraded'] { --row-accent: var(--status-degraded); }
+.check-card[data-status='partial_outage'] { --row-accent: var(--status-partial); }
+.check-card[data-status='major_outage'] { --row-accent: var(--status-major); }
+.check-card[data-status='maintenance'] { --row-accent: var(--status-maintenance); }
+.check-card[data-status='unknown'] { --row-accent: var(--status-unknown); }
 
 .check-card-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 18px;
+  gap: 16px;
 }
 
 .check-left {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 11px;
   min-width: 0;
 }
 
 .check-left .status-dot {
-  margin-top: 5px;
+  margin-top: 6px;
 }
 
 .check-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
 }
 
 .check-name-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   flex-wrap: wrap;
 }
 
 .check-name {
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
+  letter-spacing: -0.01em;
   line-height: 1.3;
 }
 
 .check-description {
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: 12.5px;
   line-height: 1.45;
 }
 
@@ -559,7 +583,7 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 10px;
   flex-shrink: 0;
   min-width: 0;
 }
@@ -567,19 +591,19 @@ textarea {
 .check-response-time {
   color: var(--text-tertiary);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11.5px;
   font-variant-numeric: tabular-nums;
 }
 
 .service-link {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   min-width: 0;
   max-width: 100%;
   color: var(--text-tertiary);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11.5px;
   line-height: 1.3;
   overflow-wrap: anywhere;
   transition: color 0.15s ease;
@@ -601,7 +625,7 @@ textarea {
 /* ── Uptime bars ──────────────────────────────── */
 
 .uptime-section {
-  padding-top: 16px;
+  padding-top: 14px;
   border-top: 1px solid var(--border-subtle);
 }
 
@@ -610,32 +634,35 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 9px;
 }
 
 .uptime-label {
   color: var(--text-tertiary);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 500;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   line-height: 1;
   text-transform: uppercase;
 }
 
 .uptime-percentage {
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
 .uptime-bar-container {
   display: grid;
-  grid-template-columns: repeat(90, minmax(2px, 1fr));
-  gap: 3px;
-  height: 30px;
+  grid-template-columns: repeat(30, minmax(0, 1fr));
+  gap: 2px;
+  height: 14px;
+  padding: 2px;
+  border-radius: 6px;
+  background: var(--bg-inset);
 }
 
 .uptime-bar-segment {
@@ -643,15 +670,15 @@ textarea {
   padding: 0;
   border: 0;
   border-radius: 2px;
-  background: var(--bg-inset);
+  background: transparent;
   cursor: pointer;
   transition: transform 0.12s ease, opacity 0.12s ease;
 }
 
 .uptime-bar-segment:hover,
 .uptime-bar-segment:focus-visible {
-  opacity: 0.8;
-  transform: scaleY(1.12);
+  opacity: 0.85;
+  transform: scaleY(1.25);
 }
 
 .uptime-bar-segment[data-status='operational'] { background: var(--status-operational); }
@@ -659,18 +686,18 @@ textarea {
 .uptime-bar-segment[data-status='partial_outage'] { background: var(--status-partial); }
 .uptime-bar-segment[data-status='major_outage'] { background: var(--status-major); }
 .uptime-bar-segment[data-status='maintenance'] { background: var(--status-maintenance); }
-.uptime-bar-segment[data-status='unknown'] { background: var(--bg-inset); }
+.uptime-bar-segment[data-status='unknown'] { background: transparent; }
 
 .uptime-legend {
   display: flex;
   justify-content: space-between;
-  margin-top: 8px;
+  margin-top: 7px;
 }
 
 .uptime-legend-label {
   color: var(--text-tertiary);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10.5px;
   line-height: 1.4;
 }
 
@@ -861,12 +888,12 @@ textarea {
 /* ── PWA / alerts banner ──────────────────────── */
 
 .pwa-banner {
-  margin-top: 28px;
+  margin-top: 16px;
   display: none;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 16px 18px;
+  padding: 14px 16px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: var(--bg-card);
@@ -1528,14 +1555,15 @@ html[data-push='true'] .pwa-banner {
   }
 
   .hero {
-    margin-top: 44px;
+    margin-top: 32px;
+    padding: 22px 20px;
   }
 
   .checks-section,
   .incidents-section,
   .recent-incidents-section,
   .admin-section {
-    margin-top: 40px;
+    margin-top: 36px;
   }
 
   .check-card {
@@ -1557,10 +1585,6 @@ html[data-push='true'] .pwa-banner {
     flex-direction: row-reverse;
     flex-wrap: wrap;
     gap: 8px;
-  }
-
-  .uptime-bar-container {
-    grid-template-columns: repeat(30, minmax(4px, 1fr));
   }
 
   .pwa-banner {
